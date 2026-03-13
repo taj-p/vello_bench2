@@ -1,6 +1,3 @@
-// Copyright 2025 the Vello Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT
-
 //! DOM-based UI for Interactive and Benchmark modes.
 
 #![allow(

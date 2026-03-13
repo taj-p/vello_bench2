@@ -1,6 +1,3 @@
-// Copyright 2025 the Vello Authors
-// SPDX-License-Identifier: Apache-2.0 OR MIT
-
 //! Minimal xorshift64 pseudo-random number generator.
 
 use vello_common::peniko::Color;
