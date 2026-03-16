@@ -40,6 +40,7 @@ mod inner {
         #[allow(dead_code)]
         program: WebGlProgram,
         texture: WebGlTexture,
+        target: Option<Pixmap>,
     }
 
     impl std::fmt::Debug for BackendInner {
@@ -97,14 +98,20 @@ mod inner {
                 gl,
                 program,
                 texture,
+                target: None,
             }
         }
 
-        pub fn render(&mut self, ctx: &mut DrawContext) {
+        /// CPU rendering: flush + render to pixmap.
+        pub fn render_offscreen(&mut self, ctx: &mut DrawContext) {
             ctx.flush();
-            let mut target = Pixmap::new(self.width, self.height);
-            ctx.render_to_pixmap(&mut target);
+            self.target = Some(Pixmap::new(self.width, self.height));
+            ctx.render_to_pixmap(self.target.as_mut().unwrap());
+        }
 
+        /// Blit the rendered pixmap to the canvas via WebGL2.
+        pub fn blit(&mut self) {
+            let target = self.target.take().expect("render_offscreen not called");
             let bytes: &[u8] = bytemuck::cast_slice(target.data());
             let gl = &self.gl;
 
@@ -166,12 +173,16 @@ mod inner {
             }
         }
 
-        pub fn render(&mut self, ctx: &mut DrawContext) {
+        pub fn render_offscreen(&mut self, ctx: &mut DrawContext) {
             let rs = vello_hybrid::RenderSize {
                 width: ctx.width() as u32,
                 height: ctx.height() as u32,
             };
             self.renderer.render(ctx, &rs).unwrap();
+        }
+
+        pub fn blit(&mut self) {
+            // No-op: hybrid renders directly to the canvas.
         }
 
         pub fn resize(&mut self, _w: u32, _h: u32) {}
@@ -219,9 +230,18 @@ impl Backend {
         self.ctx = DrawContext::new(w as u16, h as u16);
     }
 
-    /// Render the current frame and present it.
-    pub fn render(&mut self) {
-        self.inner.render(&mut self.ctx);
+    /// Render offscreen (CPU: render_to_pixmap, Hybrid: full GPU render).
+    pub fn render_offscreen(&mut self) {
+        self.inner.render_offscreen(&mut self.ctx);
+    }
+
+    /// Blit to canvas (CPU: texImage2D + draw, Hybrid: no-op).
+    pub fn blit(&mut self) {
+        self.inner.blit();
+    }
+
+    pub fn is_cpu(&self) -> bool {
+        cfg!(feature = "cpu")
     }
 
     /// Synchronize (wait for GPU on hybrid, no-op on CPU).

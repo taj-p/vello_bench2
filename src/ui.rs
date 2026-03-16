@@ -110,6 +110,8 @@ pub struct Ui {
     fps_label: HtmlElement,
     encode_label: HtmlElement,
     render_label: HtmlElement,
+    blit_label: HtmlElement,
+    total_label: HtmlElement,
     viewport_label: HtmlElement,
     /// Scene selector.
     pub scene_select: HtmlSelectElement,
@@ -245,6 +247,8 @@ impl Ui {
             fps_label: iv.fps_label,
             encode_label: iv.encode_label,
             render_label: iv.render_label,
+            blit_label: iv.blit_label,
+            total_label: iv.total_label,
             viewport_label: iv.viewport_label,
             scene_select: iv.scene_select,
             controls: iv.controls,
@@ -347,13 +351,37 @@ impl Ui {
     // ── Interactive displays ─────────────────────────────────────────────
 
     /// Update FPS/render displays.
-    pub fn update_timing(&self, fps: f64, frame_time: f64, encode_ms: f64, total_ms: f64) {
+    pub fn update_timing(
+        &self,
+        fps: f64,
+        frame_time: f64,
+        encode_ms: f64,
+        render_ms: f64,
+        blit_ms: f64,
+        total_ms: f64,
+        is_cpu: bool,
+    ) {
         self.fps_label
             .set_text_content(Some(&format!("FPS: {fps:.1}  ({frame_time:.1}ms)")));
         self.encode_label
             .set_text_content(Some(&format!("Encode: {encode_ms:.2}ms")));
         self.render_label
-            .set_text_content(Some(&format!("Frame: {total_ms:.2}ms")));
+            .set_text_content(Some(&format!("Render: {render_ms:.2}ms")));
+        if is_cpu {
+            self.blit_label
+                .set_text_content(Some(&format!("Blit: {blit_ms:.2}ms")));
+            self.blit_label
+                .style()
+                .set_property("display", "block")
+                .unwrap();
+        } else {
+            self.blit_label
+                .style()
+                .set_property("display", "none")
+                .unwrap();
+        }
+        self.total_label
+            .set_text_content(Some(&format!("Total: {total_ms:.2}ms")));
     }
 
     /// Update viewport display.
@@ -833,6 +861,8 @@ struct InteractiveViewParts {
     fps_label: HtmlElement,
     encode_label: HtmlElement,
     render_label: HtmlElement,
+    blit_label: HtmlElement,
+    total_label: HtmlElement,
     viewport_label: HtmlElement,
     scene_select: HtmlSelectElement,
     controls: Vec<(ParamCtrl, HtmlElement, &'static str)>,
@@ -1093,12 +1123,32 @@ fn build_interactive_view(
     sidebar.append_child(&encode_label).unwrap();
 
     let render_label = div(document);
-    render_label.set_text_content(Some("Frame: --"));
+    render_label.set_text_content(Some("Render: --"));
     set(
         &render_label,
         &[("color", "#9399b2"), ("margin-bottom", "2px")],
     );
     sidebar.append_child(&render_label).unwrap();
+
+    let blit_label = div(document);
+    blit_label.set_text_content(Some("Blit: --"));
+    set(
+        &blit_label,
+        &[
+            ("color", "#9399b2"),
+            ("margin-bottom", "2px"),
+            ("display", "none"),
+        ],
+    );
+    sidebar.append_child(&blit_label).unwrap();
+
+    let total_label = div(document);
+    total_label.set_text_content(Some("Total: --"));
+    set(
+        &total_label,
+        &[("color", "#9399b2"), ("margin-bottom", "2px")],
+    );
+    sidebar.append_child(&total_label).unwrap();
 
     let viewport_label = div(document);
     viewport_label.set_text_content(Some(&format!("Viewport: {vp_w} x {vp_h}")));
@@ -1184,6 +1234,8 @@ fn build_interactive_view(
         fps_label,
         encode_label,
         render_label,
+        blit_label,
+        total_label,
         viewport_label,
         scene_select,
         controls,

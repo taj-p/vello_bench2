@@ -228,7 +228,8 @@ fn render_one(
 ) {
     backend.reset();
     bench_scene.render(backend, width, height, time, Affine::IDENTITY);
-    backend.render();
+    backend.render_offscreen();
+    backend.blit();
 }
 
 /// All predefined benchmarks.

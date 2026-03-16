@@ -111,12 +111,19 @@ impl AppState {
 
         let encode_ms = perf.now() - t0;
 
-        self.backend.render();
+        self.backend.render_offscreen();
         self.backend.sync();
+        let render_ms = perf.now() - t0 - encode_ms;
+
+        self.backend.blit();
+        let blit_ms = perf.now() - t0 - encode_ms - render_ms;
 
         let total_ms = perf.now() - t0;
         let (fps, frame_time) = self.fps_tracker.frame(now);
-        self.ui.update_timing(fps, frame_time, encode_ms, total_ms);
+        let is_cpu = self.backend.is_cpu();
+        self.ui.update_timing(
+            fps, frame_time, encode_ms, render_ms, blit_ms, total_ms, is_cpu,
+        );
     }
 
     fn is_view_default(&self) -> bool {
