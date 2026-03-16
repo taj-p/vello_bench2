@@ -7,6 +7,7 @@ mod strokes;
 mod svg;
 mod text;
 
+use crate::backend::{Backend, DrawContext};
 pub use clip::ClipScene;
 pub use polyline::PolylineScene;
 pub use rect::RectScene;
@@ -14,7 +15,6 @@ pub use strokes::StrokesScene;
 pub use svg::SvgScene;
 pub use text::TextScene;
 use vello_common::kurbo::Affine;
-use vello_hybrid::{Scene, WebGlRenderer};
 
 /// A tweakable parameter for a benchmark scene.
 #[derive(Debug, Clone)]
@@ -59,8 +59,8 @@ pub trait BenchScene {
     /// Scenes should compose it with their own transforms.
     fn render(
         &mut self,
-        scene: &mut Scene,
-        renderer: &mut WebGlRenderer,
+        scene: &mut DrawContext,
+        backend: &mut Backend,
         width: u32,
         height: u32,
         time: f64,

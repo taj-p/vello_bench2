@@ -6,16 +6,16 @@
 )]
 
 use super::{BenchScene, Param, ParamKind, bounce, delta_time};
+use crate::backend::{Backend, DrawContext, Pixmap};
 use crate::rng::Rng;
 use smallvec::smallvec;
 use vello_common::kurbo::{Affine, Point, Rect};
 use vello_common::paint::{Image, ImageId, ImageSource};
 use vello_common::peniko::{
     Color, ColorStop, ColorStops, Extend, Gradient, ImageQuality, ImageSampler,
-    LinearGradientPosition, RadialGradientPosition, SweepGradientPosition,
-    color::DynamicColor, color::PremulRgba8,
+    LinearGradientPosition, RadialGradientPosition, SweepGradientPosition, color::DynamicColor,
+    color::PremulRgba8,
 };
-use vello_hybrid::{Pixmap, Scene, WebGlRenderer};
 
 const NUM_IMAGES: usize = 50;
 const IMAGE_SIZE: u16 = 64;
@@ -202,7 +202,7 @@ impl RectScene {
     /// Each image gets a concentric-ring pattern with a unique frequency and
     /// color palette — cheap to compute but produces visible moiré when scaled,
     /// making the difference between nearest-neighbor and bilinear obvious.
-    fn ensure_images(&mut self, renderer: &mut WebGlRenderer) {
+    fn ensure_images(&mut self, scene: &mut DrawContext, backend: &mut Backend) {
         if !self.image_ids.is_empty() && self.images_were_opaque == self.image_opaque {
             return;
         }
@@ -267,7 +267,7 @@ impl RectScene {
 
             let pixmap =
                 Pixmap::from_parts_with_opacity(pixels, IMAGE_SIZE, IMAGE_SIZE, !self.image_opaque);
-            let id = renderer.upload_image(&pixmap);
+            let id = backend.upload_image(scene, pixmap);
             self.image_ids.push(id);
         }
     }
@@ -329,11 +329,7 @@ impl BenchScene for RectScene {
             Param {
                 name: "gradient_shape",
                 label: "Gradient Shape",
-                kind: ParamKind::Select(vec![
-                    ("Linear", 0.0),
-                    ("Radial", 1.0),
-                    ("Sweep", 2.0),
-                ]),
+                kind: ParamKind::Select(vec![("Linear", 0.0), ("Radial", 1.0), ("Sweep", 2.0)]),
                 value: self.gradient_shape as f64,
             },
             Param {
@@ -373,8 +369,8 @@ impl BenchScene for RectScene {
 
     fn render(
         &mut self,
-        scene: &mut Scene,
-        renderer: &mut WebGlRenderer,
+        scene: &mut DrawContext,
+        backend: &mut Backend,
         width: u32,
         height: u32,
         time: f64,
@@ -390,7 +386,7 @@ impl BenchScene for RectScene {
 
         // Lazily upload images on first use.
         if self.paint_mode == 2 {
-            self.ensure_images(renderer);
+            self.ensure_images(scene, backend);
         }
 
         let dt = delta_time(&mut self.last_time, time, self.speed);
@@ -477,7 +473,8 @@ impl BenchScene for RectScene {
                                 let t = r.grad_anim.sweep.sample(frame);
                                 // Oscillate between π/2 and 2π.
                                 std::f32::consts::FRAC_PI_2
-                                    + (1.0 + t) * 0.5
+                                    + (1.0 + t)
+                                        * 0.5
                                         * (std::f32::consts::TAU - std::f32::consts::FRAC_PI_2)
                             } else {
                                 std::f32::consts::TAU
@@ -492,8 +489,7 @@ impl BenchScene for RectScene {
                         _ => {
                             // Linear: animate gradient line angle around the center.
                             if dyn_on {
-                                let a = r.grad_anim.angle.sample(frame)
-                                    * std::f32::consts::PI;
+                                let a = r.grad_anim.angle.sample(frame) * std::f32::consts::PI;
                                 let dx = (a.cos() as f64) * half;
                                 let dy = (a.sin() as f64) * half;
                                 LinearGradientPosition {

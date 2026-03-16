@@ -2,28 +2,29 @@
 set -euo pipefail
 
 DIST=dist
+TARGET=wasm32-unknown-unknown
 
-echo "==> Building SIMD variant..."
-RUSTFLAGS="-Ctarget-feature=+simd128" cargo build --target wasm32-unknown-unknown --release
+build_variant() {
+  local features=$1
+  local rustflags=$2
+  local out_dir=$3
 
-echo "==> Running wasm-bindgen (SIMD)..."
-mkdir -p "$DIST/simd"
-wasm-bindgen \
-  --target web \
-  --out-dir "$DIST/simd" \
-  --no-typescript \
-  target/wasm32-unknown-unknown/release/vello_bench2.wasm
+  echo "==> Building $out_dir..."
+  RUSTFLAGS="$rustflags" cargo build --target $TARGET --release --no-default-features --features "$features"
 
-echo "==> Building no-SIMD variant..."
-RUSTFLAGS="" cargo build --target wasm32-unknown-unknown --release
+  echo "==> Running wasm-bindgen ($out_dir)..."
+  mkdir -p "$DIST/$out_dir"
+  wasm-bindgen \
+    --target web \
+    --out-dir "$DIST/$out_dir" \
+    --no-typescript \
+    target/$TARGET/release/vello_bench2.wasm
+}
 
-echo "==> Running wasm-bindgen (no-SIMD)..."
-mkdir -p "$DIST/nosimd"
-wasm-bindgen \
-  --target web \
-  --out-dir "$DIST/nosimd" \
-  --no-typescript \
-  target/wasm32-unknown-unknown/release/vello_bench2.wasm
+build_variant hybrid "-Ctarget-feature=+simd128" hybrid-simd
+build_variant hybrid ""                          hybrid-nosimd
+build_variant cpu    "-Ctarget-feature=+simd128" cpu-simd
+build_variant cpu    ""                          cpu-nosimd
 
 cp web/index.html "$DIST/index.html"
 

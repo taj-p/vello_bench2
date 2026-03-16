@@ -6,7 +6,13 @@ edition = "2024"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = ["hybrid"]
+hybrid = ["dep:vello_hybrid"]
+cpu = ["dep:vello_cpu"]
+
 [dependencies]
+bytemuck = "1.25"
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
 log = "0.4.29"
@@ -16,7 +22,8 @@ smallvec = {version = "1.15.1" }
 skrifa = { version = "0.40.0" }
 usvg = { version = "0.45.1" }
 vello_common = { git = "https://github.com/linebender/vello", rev = "dc82adc4" }
-vello_hybrid = { git = "https://github.com/linebender/vello", rev = "dc82adc4", features = ["webgl", "text"] }
+vello_hybrid = { git = "https://github.com/linebender/vello", rev = "dc82adc4", features = ["webgl", "text"], optional = true }
+vello_cpu = { git = "https://github.com/linebender/vello", rev = "dc82adc4", features = ["text"], optional = true }
 js-sys = "0.3.83"
 wasm-bindgen = "0.2.106"
 wasm-bindgen-futures = "0.4.56"
@@ -31,6 +38,13 @@ web-sys = { version = "0.3.83", features = [
     "HtmlSelectElement",
     "CssStyleDeclaration",
     "WebGl2RenderingContext",
+    "WebGlBuffer",
+    "WebGlProgram",
+    "WebGlShader",
+    "WebGlTexture",
+    "WebGlUniformLocation",
+    "CanvasRenderingContext2d",
+    "ImageData",
     "Performance",
     "Storage",
     "Event",

@@ -6,10 +6,10 @@
 )]
 
 use super::{BenchScene, Param, ParamKind, bounce, delta_time};
+use crate::backend::{Backend, DrawContext};
 use crate::rng::Rng;
 use vello_common::kurbo::{Affine, BezPath, Cap, Stroke};
 use vello_common::peniko::Color;
-use vello_hybrid::{Scene, WebGlRenderer};
 
 /// A static offset point relative to the stroke's origin.
 #[derive(Debug, Clone)]
@@ -230,8 +230,8 @@ impl BenchScene for StrokesScene {
 
     fn render(
         &mut self,
-        scene: &mut Scene,
-        _renderer: &mut WebGlRenderer,
+        scene: &mut DrawContext,
+        _backend: &mut Backend,
         width: u32,
         height: u32,
         time: f64,

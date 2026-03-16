@@ -6,11 +6,11 @@
 )]
 
 use super::{BenchScene, Param, ParamKind};
+use crate::backend::{Backend, DrawContext};
 use usvg::tiny_skia_path::PathSegment;
 use usvg::{Group, Node};
 use vello_common::kurbo::{Affine, BezPath, Stroke};
 use vello_common::peniko::Color;
-use vello_hybrid::{Scene, WebGlRenderer};
 
 /// A single draw command in document order.
 enum DrawCmd {
@@ -251,8 +251,8 @@ impl BenchScene for SvgScene {
 
     fn render(
         &mut self,
-        scene: &mut Scene,
-        _renderer: &mut WebGlRenderer,
+        scene: &mut DrawContext,
+        _backend: &mut Backend,
         width: u32,
         height: u32,
         _time: f64,

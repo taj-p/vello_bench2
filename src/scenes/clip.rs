@@ -8,10 +8,10 @@
 use std::f64::consts::{FRAC_PI_2, PI};
 
 use super::{BenchScene, Param, ParamKind, bounce, delta_time};
+use crate::backend::{Backend, DrawContext};
 use crate::rng::Rng;
 use vello_common::kurbo::{Affine, BezPath, Point, Rect, Vec2};
 use vello_common::peniko::Color;
-use vello_hybrid::{Scene, WebGlRenderer};
 
 /// An animated rectangle with position, velocity, color.
 #[derive(Debug)]
@@ -146,8 +146,8 @@ impl BenchScene for ClipScene {
 
     fn render(
         &mut self,
-        scene: &mut Scene,
-        _renderer: &mut WebGlRenderer,
+        scene: &mut DrawContext,
+        _backend: &mut Backend,
         width: u32,
         height: u32,
         time: f64,

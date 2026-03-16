@@ -48,30 +48,48 @@ jobs:
             cargo install wasm-bindgen-cli
           fi
 
-      - name: Build wasm (SIMD)
-        run: cargo build --target wasm32-unknown-unknown --release
+      # Hybrid + SIMD
+      - name: Build hybrid+simd
+        run: cargo build --target wasm32-unknown-unknown --release --no-default-features --features hybrid
         env:
           RUSTFLAGS: -Ctarget-feature=+simd128
 
-      - name: Generate SIMD bindings
+      - name: Bindgen hybrid+simd
         run: |
-          wasm-bindgen \
-            --target web \
-            --out-dir dist/simd \
-            --no-typescript \
+          wasm-bindgen --target web --out-dir dist/hybrid-simd --no-typescript \
             target/wasm32-unknown-unknown/release/vello_bench2.wasm
 
-      - name: Build wasm (no SIMD)
-        run: cargo build --target wasm32-unknown-unknown --release
+      # Hybrid + no-SIMD
+      - name: Build hybrid+nosimd
+        run: cargo build --target wasm32-unknown-unknown --release --no-default-features --features hybrid
         env:
           RUSTFLAGS: ""
 
-      - name: Generate no-SIMD bindings
+      - name: Bindgen hybrid+nosimd
         run: |
-          wasm-bindgen \
-            --target web \
-            --out-dir dist/nosimd \
-            --no-typescript \
+          wasm-bindgen --target web --out-dir dist/hybrid-nosimd --no-typescript \
+            target/wasm32-unknown-unknown/release/vello_bench2.wasm
+
+      # CPU + SIMD
+      - name: Build cpu+simd
+        run: cargo build --target wasm32-unknown-unknown --release --no-default-features --features cpu
+        env:
+          RUSTFLAGS: -Ctarget-feature=+simd128
+
+      - name: Bindgen cpu+simd
+        run: |
+          wasm-bindgen --target web --out-dir dist/cpu-simd --no-typescript \
+            target/wasm32-unknown-unknown/release/vello_bench2.wasm
+
+      # CPU + no-SIMD
+      - name: Build cpu+nosimd
+        run: cargo build --target wasm32-unknown-unknown --release --no-default-features --features cpu
+        env:
+          RUSTFLAGS: ""
+
+      - name: Bindgen cpu+nosimd
+        run: |
+          wasm-bindgen --target web --out-dir dist/cpu-nosimd --no-typescript \
             target/wasm32-unknown-unknown/release/vello_bench2.wasm
 
       - name: Copy index.html

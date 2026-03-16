@@ -6,10 +6,10 @@
 )]
 
 use super::{BenchScene, Param, ParamKind, bounce, delta_time};
+use crate::backend::{Backend, DrawContext};
 use crate::rng::Rng;
 use vello_common::kurbo::{Affine, BezPath};
 use vello_common::peniko::{Color, Fill};
-use vello_hybrid::{Scene, WebGlRenderer};
 
 /// An animated vertex with position and velocity.
 #[derive(Debug)]
@@ -85,8 +85,8 @@ impl BenchScene for PolylineScene {
 
     fn render(
         &mut self,
-        scene: &mut Scene,
-        _renderer: &mut WebGlRenderer,
+        scene: &mut DrawContext,
+        _backend: &mut Backend,
         width: u32,
         height: u32,
         time: f64,

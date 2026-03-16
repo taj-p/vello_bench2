@@ -1353,6 +1353,7 @@ dependencies = [
 name = "vello_bench2"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "cargo-run-wasm",
  "console_error_panic_hook",
  "console_log",
@@ -1364,6 +1365,7 @@ dependencies = [
  "smallvec",
  "usvg",
  "vello_common",
+ "vello_cpu",
  "vello_hybrid",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1384,6 +1386,17 @@ dependencies = [
  "skrifa",
  "smallvec",
  "thiserror",
+]
+
+[[package]]
+name = "vello_cpu"
+version = "0.0.6"
+source = "git+https://github.com/linebender/vello?rev=dc82adc4#dc82adc4e39d657151170f82ea2b46b1b69aafca"
+dependencies = [
+ "bytemuck",
+ "hashbrown 0.16.1",
+ "vello_api",
+ "vello_common",
 ]
 
 [[package]]

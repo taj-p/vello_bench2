@@ -8,16 +8,15 @@
 use std::sync::Arc;
 
 use super::{BenchScene, Param, ParamKind, bounce, delta_time};
+use crate::backend::{Backend, DrawContext};
 use crate::rng::Rng;
 use skrifa::MetadataProvider;
 use skrifa::raw::FileRef;
 use vello_common::glyph::Glyph;
 use vello_common::kurbo::Affine;
 use vello_common::peniko::{Blob, Color, FontData};
-use vello_hybrid::{Scene, WebGlRenderer};
 
-const INCONSOLATA: &[u8] =
-    include_bytes!("../../assets/Inconsolata.ttf");
+const INCONSOLATA: &[u8] = include_bytes!("../../assets/Inconsolata.ttf");
 
 /// Printable ASCII range used for random text generation.
 const ASCII_START: u8 = b'!';
@@ -172,8 +171,8 @@ impl BenchScene for TextScene {
 
     fn render(
         &mut self,
-        scene: &mut Scene,
-        _renderer: &mut WebGlRenderer,
+        scene: &mut DrawContext,
+        _backend: &mut Backend,
         width: u32,
         height: u32,
         time: f64,

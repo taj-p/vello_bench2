@@ -10,6 +10,7 @@
 )]
 #![cfg(target_arch = "wasm32")]
 
+pub(crate) mod backend;
 mod fps;
 pub(crate) mod harness;
 pub(crate) mod rng;
@@ -20,12 +21,12 @@ pub mod ui;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use backend::{Backend, DrawContext};
 use fps::FpsTracker;
 use harness::{BenchDef, BenchHarness, HarnessEvent, bench_defs};
 use scenes::BenchScene;
 use ui::{AppMode, Ui};
 use vello_common::kurbo::Affine;
-use vello_hybrid::Scene;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
@@ -40,8 +41,8 @@ extern "C" {
 struct AppState {
     scenes: Vec<Box<dyn BenchScene>>,
     current_scene: usize,
-    scene: Scene,
-    renderer: vello_hybrid::WebGlRenderer,
+    scene: DrawContext,
+    backend: Backend,
     canvas: HtmlCanvasElement,
     width: u32,
     height: u32,
@@ -87,8 +88,8 @@ impl AppState {
         let selected = self.ui.selected_scene();
         if selected != self.current_scene && selected < self.scenes.len() {
             self.current_scene = selected;
-            self.renderer = vello_hybrid::WebGlRenderer::new(&self.canvas);
-            self.scene = Scene::new(self.width as u16, self.height as u16);
+            self.backend = Backend::new(&self.canvas);
+            self.scene = backend::new_draw_context(self.width, self.height);
             self.scenes = scenes::all_scenes();
             self.reset_view();
             let params = self.scenes[self.current_scene].params();
@@ -108,16 +109,12 @@ impl AppState {
         self.scene.reset();
         let (w, h) = (self.width, self.height);
         let view = Affine::translate((self.pan_x, self.pan_y)) * Affine::scale(self.zoom);
-        self.scenes[idx].render(&mut self.scene, &mut self.renderer, w, h, now, view);
+        self.scenes[idx].render(&mut self.scene, &mut self.backend, w, h, now, view);
 
         let encode_ms = perf.now() - t0;
 
-        let rs = vello_hybrid::RenderSize {
-            width: w,
-            height: h,
-        };
-        self.renderer.render(&self.scene, &rs).unwrap();
-        gpu_sync(&self.renderer);
+        self.backend.render(&mut self.scene);
+        self.backend.sync();
 
         let total_ms = perf.now() - t0;
         let (fps, frame_time) = self.fps_tracker.frame(now);
@@ -194,6 +191,7 @@ impl AppState {
     }
 }
 
+#[cfg(not(feature = "cpu"))]
 pub(crate) fn gpu_sync(renderer: &vello_hybrid::WebGlRenderer) {
     let gl = renderer.gl_context();
     let mut pixel = [0_u8; 4];
@@ -252,8 +250,8 @@ pub async fn run() {
         .unwrap_or(0);
 
     let ui = Ui::build(&document, &bench_scenes, &defs, initial_scene, px_w, px_h);
-    let renderer = vello_hybrid::WebGlRenderer::new(&canvas);
-    let scene = Scene::new(px_w as u16, px_h as u16);
+    let backend = Backend::new(&canvas);
+    let scene = backend::new_draw_context(px_w, px_h);
     let now = performance.now();
 
     // Canvas visibility depends on initial mode.
@@ -271,7 +269,7 @@ pub async fn run() {
         scenes: bench_scenes,
         current_scene: initial_scene,
         scene,
-        renderer,
+        backend,
         canvas,
         width: px_w,
         height: px_h,
@@ -370,7 +368,8 @@ fn wire_events(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
                 st.canvas.set_height(vp_h);
                 st.width = vp_w;
                 st.height = vp_h;
-                st.scene = Scene::new(vp_w as u16, vp_h as u16);
+                st.scene = backend::new_draw_context(vp_w, vp_h);
+                st.backend.resize(vp_w, vp_h);
             }
             st.harness.warmup_ms = st.ui.warmup_ms();
             st.harness.run_ms = st.ui.run_ms();
@@ -740,7 +739,8 @@ fn wire_resize(state: &Rc<RefCell<AppState>>) {
             .unwrap();
         st.width = px_w;
         st.height = px_h;
-        st.scene = Scene::new(px_w as u16, px_h as u16);
+        st.scene = backend::new_draw_context(px_w, px_h);
+        st.backend.resize(px_w, px_h);
         st.ui.update_viewport(px_w, px_h);
     }) as Box<dyn FnMut(_)>);
     web_sys::window()

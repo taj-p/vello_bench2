@@ -5,9 +5,9 @@
     reason = "truncation has no appreciable impact in this benchmark"
 )]
 
+use crate::backend::{self, Backend, DrawContext};
 use crate::scenes::{self, BenchScene};
 use vello_common::kurbo::Affine;
-use vello_hybrid::Scene;
 use web_sys::HtmlCanvasElement;
 
 /// A predefined benchmark with fixed parameters.
@@ -61,7 +61,7 @@ enum Phase {
 
 /// Orchestrates running benchmarks.
 ///
-/// The harness creates its own fresh `Scene` and bench scene instances
+/// The harness creates its own fresh context and bench scene instances
 /// for each benchmark to ensure complete isolation from interactive mode
 /// and between test cases.
 pub(crate) struct BenchHarness {
@@ -73,12 +73,12 @@ pub(crate) struct BenchHarness {
     run_order: Vec<usize>,
     /// Current position within `run_order`.
     run_pos: usize,
-    /// Fresh vello scene created per-benchmark.
-    bench_scene: Option<Scene>,
+    /// Fresh draw context created per-benchmark.
+    bench_context: Option<DrawContext>,
     /// Fresh bench scene instances created per-benchmark.
     bench_scenes: Option<Vec<Box<dyn BenchScene>>>,
-    /// Fresh renderer created per-benchmark run.
-    bench_renderer: Option<vello_hybrid::WebGlRenderer>,
+    /// Fresh backend created per-benchmark run.
+    bench_backend: Option<Backend>,
 }
 
 impl std::fmt::Debug for BenchHarness {
@@ -100,9 +100,9 @@ impl BenchHarness {
             results: Vec::new(),
             run_order: Vec::new(),
             run_pos: 0,
-            bench_scene: None,
+            bench_context: None,
             bench_scenes: None,
-            bench_renderer: None,
+            bench_backend: None,
         }
     }
 
@@ -117,10 +117,10 @@ impl BenchHarness {
         self.results.clear();
         self.run_order = selected;
         self.run_pos = 0;
-        // Create fresh scenes and renderer for complete isolation from interactive mode.
-        self.bench_scene = Some(Scene::new(width as u16, height as u16));
+        // Create fresh context and backend for complete isolation from interactive mode.
+        self.bench_context = Some(backend::new_draw_context(width, height));
         self.bench_scenes = Some(scenes::all_scenes());
-        self.bench_renderer = Some(vello_hybrid::WebGlRenderer::new(canvas));
+        self.bench_backend = Some(Backend::new(canvas));
         if self.run_order.is_empty() {
             self.phase = Phase::Complete;
         } else {
@@ -146,24 +146,24 @@ impl BenchHarness {
         match self.phase {
             Phase::Idle | Phase::Complete => {}
             Phase::PendingWarmup(idx) => {
-                // Create a fresh vello Scene for this benchmark to prevent
+                // Create a fresh draw context for this benchmark to prevent
                 // state leaking between test cases.
-                let vello_scene = self
-                    .bench_scene
-                    .insert(Scene::new(width as u16, height as u16));
+                let ctx = self
+                    .bench_context
+                    .insert(backend::new_draw_context(width, height));
 
                 let def = &defs[idx];
                 let bench_scenes = self.bench_scenes.as_mut().unwrap();
                 let scene = &mut *bench_scenes[def.scene_idx];
                 apply_params(scene, def.params);
 
-                let renderer = self.bench_renderer.as_mut().unwrap();
+                let be = self.bench_backend.as_mut().unwrap();
                 let perf = web_sys::window().unwrap().performance().unwrap();
 
                 // First frame: generate geometry + capture screenshot
                 let now = perf.now();
-                render_one(scene, vello_scene, renderer, width, height, now);
-                gpu_sync(renderer);
+                render_one(scene, ctx, be, width, height, now);
+                be.sync();
                 events.push(HarnessEvent::ScreenshotReady);
 
                 // Warmup loop
@@ -171,8 +171,8 @@ impl BenchHarness {
                 let mut count = 0_usize;
                 loop {
                     let t = perf.now();
-                    render_one(scene, vello_scene, renderer, width, height, t);
-                    gpu_sync(renderer);
+                    render_one(scene, ctx, be, width, height, t);
+                    be.sync();
                     count += 1;
                     if perf.now() - start >= self.warmup_ms {
                         break;
@@ -191,15 +191,15 @@ impl BenchHarness {
                 let def = &defs[idx];
                 let bench_scenes = self.bench_scenes.as_mut().unwrap();
                 let scene = &mut *bench_scenes[def.scene_idx];
-                let vello_scene = self.bench_scene.as_mut().unwrap();
-                let renderer = self.bench_renderer.as_mut().unwrap();
+                let ctx = self.bench_context.as_mut().unwrap();
+                let be = self.bench_backend.as_mut().unwrap();
 
                 let perf = web_sys::window().unwrap().performance().unwrap();
                 let start = perf.now();
                 for _ in 0..target_iters {
                     let t = perf.now();
-                    render_one(scene, vello_scene, renderer, width, height, t);
-                    gpu_sync(renderer);
+                    render_one(scene, ctx, be, width, height, t);
+                    be.sync();
                 }
                 let total_ms = perf.now() - start;
 
@@ -218,9 +218,9 @@ impl BenchHarness {
                 } else {
                     self.phase = Phase::Complete;
                     // Drop benchmark state to free memory.
-                    self.bench_scene = None;
+                    self.bench_context = None;
                     self.bench_scenes = None;
-                    self.bench_renderer = None;
+                    self.bench_backend = None;
                     events.push(HarnessEvent::AllDone);
                 }
             }
@@ -240,19 +240,16 @@ fn apply_params(scene: &mut dyn BenchScene, params: &[(&str, f64)]) {
 
 fn render_one(
     bench_scene: &mut dyn BenchScene,
-    vello_scene: &mut Scene,
-    renderer: &mut vello_hybrid::WebGlRenderer,
+    ctx: &mut DrawContext,
+    backend: &mut Backend,
     width: u32,
     height: u32,
     time: f64,
 ) {
-    vello_scene.reset();
-    bench_scene.render(vello_scene, renderer, width, height, time, Affine::IDENTITY);
-    let render_size = vello_hybrid::RenderSize { width, height };
-    renderer.render(vello_scene, &render_size).unwrap();
+    ctx.reset();
+    bench_scene.render(ctx, backend, width, height, time, Affine::IDENTITY);
+    backend.render(ctx);
 }
-
-use crate::gpu_sync;
 
 /// All predefined benchmarks.
 pub(crate) fn bench_defs() -> Vec<BenchDef> {

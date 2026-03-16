@@ -13,11 +13,18 @@
 <body>
   <script type="module">
     const simd = localStorage.getItem("vello_bench_simd") !== "0";
-    const mod_path = simd ? "./simd/vello_bench2.js" : "./nosimd/vello_bench2.js";
+    const renderer = localStorage.getItem("vello_bench_renderer") || "hybrid";
+    const simdStr = simd ? "simd" : "nosimd";
+    const mod_path = `./${renderer}-${simdStr}/vello_bench2.js`;
 
     window.__vello_simd = simd;
+    window.__vello_renderer = renderer;
     window.__vello_toggle_simd = () => {
       localStorage.setItem("vello_bench_simd", simd ? "0" : "1");
+      location.reload();
+    };
+    window.__vello_toggle_renderer = () => {
+      localStorage.setItem("vello_bench_renderer", renderer === "hybrid" ? "cpu" : "hybrid");
       location.reload();
     };
 
