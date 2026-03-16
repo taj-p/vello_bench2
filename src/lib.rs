@@ -74,6 +74,7 @@ impl AppState {
             AppMode::Interactive => self.tick_interactive(now),
             AppMode::Benchmark => self.tick_benchmark(now),
         }
+        self.ui.flush_state();
     }
 
     fn tick_interactive(&mut self, now: f64) {
@@ -86,6 +87,7 @@ impl AppState {
             self.reset_view();
             let params = self.scenes[self.current_scene].params();
             self.ui.rebuild_params(&params);
+            self.ui.mark_dirty();
         }
 
         let params = self.ui.read_params();
@@ -229,8 +231,15 @@ pub async fn run() {
     let bench_scenes = scenes::all_scenes();
     let defs = bench_defs();
 
-    let initial_mode = AppMode::Benchmark;
-    let initial_scene = 0;
+    let saved_state = storage::load_ui_state();
+    let initial_mode = match saved_state.mode.as_deref() {
+        Some("interactive") => AppMode::Interactive,
+        _ => AppMode::Benchmark,
+    };
+    let initial_scene = saved_state
+        .scene
+        .filter(|&i| i < bench_scenes.len())
+        .unwrap_or(0);
 
     let ui = Ui::build(&document, &bench_scenes, &defs, initial_scene, px_w, px_h);
     let renderer = vello_hybrid::WebGlRenderer::new(&canvas);
@@ -271,6 +280,9 @@ pub async fn run() {
     {
         let mut st = state.borrow_mut();
         st.ui.set_mode(initial_mode);
+        st.ui.apply_saved_benches(&saved_state);
+        st.ui.apply_saved_params(&saved_state);
+        st.ui.save_state();
     }
 
     wire_events(&state, &window);
@@ -300,7 +312,9 @@ fn wire_events(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
         let s = state.clone();
         let canvas_ref = state.borrow().canvas.clone();
         let cb = Closure::wrap(Box::new(move || {
-            s.borrow_mut().ui.set_mode(AppMode::Interactive);
+            let mut st = s.borrow_mut();
+            st.ui.set_mode(AppMode::Interactive);
+            st.ui.flush_state();
             canvas_ref
                 .style()
                 .set_property("visibility", "visible")
@@ -313,7 +327,9 @@ fn wire_events(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
         let s = state.clone();
         let canvas_ref = state.borrow().canvas.clone();
         let cb = Closure::wrap(Box::new(move || {
-            s.borrow_mut().ui.set_mode(AppMode::Benchmark);
+            let mut st = s.borrow_mut();
+            st.ui.set_mode(AppMode::Benchmark);
+            st.ui.flush_state();
             canvas_ref
                 .style()
                 .set_property("visibility", "hidden")
@@ -400,6 +416,39 @@ fn wire_events(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
         btn.add_event_listener_with_callback("click", cb.as_ref().unchecked_ref())
             .unwrap();
         cb.forget();
+    }
+
+    // Scene select → mark dirty
+    {
+        let dirty = state.borrow().ui.dirty_flag();
+        let sel = state.borrow().ui.scene_select.clone();
+        let cb = Closure::wrap(Box::new(move || {
+            dirty.set(true);
+        }) as Box<dyn FnMut()>);
+        sel.add_event_listener_with_callback("change", cb.as_ref().unchecked_ref())
+            .unwrap();
+        cb.forget();
+    }
+
+    // Bench checkbox changes → mark dirty
+    {
+        let checkboxes: Vec<web_sys::HtmlInputElement> = state
+            .borrow()
+            .ui
+            .bench_checkbox_elements()
+            .into_iter()
+            .cloned()
+            .collect();
+        for cb_el in checkboxes {
+            let dirty = state.borrow().ui.dirty_flag();
+            let cb = Closure::wrap(Box::new(move || {
+                dirty.set(true);
+            }) as Box<dyn FnMut()>);
+            cb_el
+                .add_event_listener_with_callback("change", cb.as_ref().unchecked_ref())
+                .unwrap();
+            cb.forget();
+        }
     }
 
     wire_pan_zoom(state, window);

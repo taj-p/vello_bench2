@@ -65,3 +65,42 @@ pub(crate) fn delete_report(idx: usize) {
         }
     }
 }
+
+// ── UI state persistence ─────────────────────────────────────────────────────
+
+const UI_STATE_KEY: &str = "vello_bench_ui_state";
+
+/// Persisted UI state across page reloads.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(crate) struct UiState {
+    /// `"interactive"` or `"benchmark"`.
+    pub(crate) mode: Option<String>,
+    /// Selected scene index (interactive mode).
+    pub(crate) scene: Option<usize>,
+    /// Parameter values keyed by name (interactive mode).
+    #[serde(default)]
+    pub(crate) params: Vec<(String, f64)>,
+    /// Checked benchmark indices (benchmark mode).
+    #[serde(default)]
+    pub(crate) benches: Vec<usize>,
+}
+
+/// Load persisted UI state.
+pub(crate) fn load_ui_state() -> UiState {
+    let Some(storage) = local_storage() else {
+        return UiState::default();
+    };
+    let Some(json) = storage.get_item(UI_STATE_KEY).ok().flatten() else {
+        return UiState::default();
+    };
+    serde_json::from_str(&json).unwrap_or_default()
+}
+
+/// Save UI state to localStorage.
+pub(crate) fn save_ui_state(state: &UiState) {
+    if let Some(storage) = local_storage()
+        && let Ok(json) = serde_json::to_string(state)
+    {
+        let _ = storage.set_item(UI_STATE_KEY, &json);
+    }
+}

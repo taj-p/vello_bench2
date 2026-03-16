@@ -5,12 +5,12 @@
     reason = "truncation has no appreciable impact in this benchmark"
 )]
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::harness::{BenchDef, BenchResult};
 use crate::scenes::{BenchScene, Param, ParamKind};
-use crate::storage::BenchReport;
+use crate::storage::{BenchReport, UiState};
 use wasm_bindgen::prelude::*;
 use web_sys::{
     Document, Element, HtmlElement, HtmlImageElement, HtmlInputElement, HtmlSelectElement,
@@ -148,6 +148,10 @@ pub struct Ui {
 
     /// Current mode.
     pub mode: AppMode,
+
+    /// Whether state needs saving to localStorage.
+    /// Shared with closures that mark it on param/checkbox changes.
+    dirty: Rc<Cell<bool>>,
 }
 
 impl std::fmt::Debug for Ui {
@@ -182,10 +186,12 @@ impl Ui {
             ],
         );
 
+        let dirty = Rc::new(Cell::new(false));
+
         let (top_bar, tab_interactive, tab_benchmark) = build_top_bar(document);
         body.append_child(&top_bar).unwrap();
 
-        let iv = build_interactive_view(document, scenes, current_scene, vp_w, vp_h);
+        let iv = build_interactive_view(document, scenes, current_scene, vp_w, vp_h, &dirty);
         body.append_child(&iv.view).unwrap();
 
         let benchmark_view = div(document);
@@ -217,7 +223,7 @@ impl Ui {
         let cfg = build_bench_config(document, vp_w, vp_h);
         bench_layout.append_child(&cfg.wrapper).unwrap();
 
-        let rows = build_bench_rows(document, bench_defs, &cfg.screenshot_img);
+        let rows = build_bench_rows(document, bench_defs, &cfg.screenshot_img, &dirty);
         bench_layout.append_child(&rows.container).unwrap();
 
         benchmark_view.append_child(&bench_layout).unwrap();
@@ -255,6 +261,7 @@ impl Ui {
             delete_btn: cfg.delete_btn,
             compare_report: None,
             mode: AppMode::Benchmark,
+            dirty,
         };
         ui.set_mode(AppMode::Benchmark);
         ui
@@ -265,6 +272,7 @@ impl Ui {
     /// Switch mode.
     pub fn set_mode(&mut self, mode: AppMode) {
         self.mode = mode;
+        self.dirty.set(true);
         match mode {
             AppMode::Interactive => {
                 self.interactive_view
@@ -376,13 +384,23 @@ impl Ui {
         }
         let document = doc();
         // Insert controls before the reset-view button so they don't end up below it.
-        self.controls =
-            build_controls(&document, &self.sidebar, params, Some(&self.reset_view_btn));
+        self.controls = build_controls(
+            &document,
+            &self.sidebar,
+            params,
+            Some(&self.reset_view_btn),
+            Some(&self.dirty),
+        );
     }
 
     /// Selected interactive scene index.
     pub fn selected_scene(&self) -> usize {
         self.scene_select.selected_index() as usize
+    }
+
+    /// Return references to all bench row checkboxes (for event wiring).
+    pub fn bench_checkbox_elements(&self) -> Vec<&HtmlInputElement> {
+        self.bench_rows.iter().map(|r| &r.checkbox).collect()
     }
 
     // ── Benchmark displays ───────────────────────────────────────────────
@@ -683,6 +701,86 @@ impl Ui {
         &self.compare_select
     }
 
+    /// Mark state as needing a save.
+    pub fn mark_dirty(&self) {
+        self.dirty.set(true);
+    }
+
+    /// If dirty, persist current state to localStorage.
+    pub fn flush_state(&self) {
+        if self.dirty.get() {
+            self.dirty.set(false);
+            self.save_state();
+        }
+    }
+
+    /// Return a clone of the dirty flag for use in closures.
+    pub fn dirty_flag(&self) -> Rc<Cell<bool>> {
+        self.dirty.clone()
+    }
+
+    /// Write current UI state to localStorage.
+    pub fn save_state(&self) {
+        let mode_str = match self.mode {
+            AppMode::Interactive => "interactive",
+            AppMode::Benchmark => "benchmark",
+        };
+        let scene = self.scene_select.selected_index() as usize;
+        let params: Vec<(String, f64)> = self
+            .controls
+            .iter()
+            .map(|(ctrl, _, name)| {
+                let v: f64 = match ctrl {
+                    ParamCtrl::Slider(i) => i.value().parse().unwrap_or(0.0),
+                    ParamCtrl::Select(s) => s.value().parse().unwrap_or(0.0),
+                };
+                (name.to_string(), v)
+            })
+            .collect();
+        let benches: Vec<usize> = self
+            .bench_rows
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.checkbox.checked())
+            .map(|(i, _)| i)
+            .collect();
+        crate::storage::save_ui_state(&UiState {
+            mode: Some(mode_str.to_string()),
+            scene: Some(scene),
+            params,
+            benches,
+        });
+    }
+
+    /// Apply saved bench checkbox selection.
+    pub(crate) fn apply_saved_benches(&self, saved: &UiState) {
+        if saved.benches.is_empty() {
+            return;
+        }
+        let set: std::collections::HashSet<usize> = saved.benches.iter().copied().collect();
+        for (i, r) in self.bench_rows.iter().enumerate() {
+            r.checkbox.set_checked(set.contains(&i));
+        }
+    }
+
+    /// Apply saved interactive param values.
+    pub(crate) fn apply_saved_params(&self, saved: &UiState) {
+        for (ctrl, val_span, name) in &self.controls {
+            if let Some((_, v)) = saved.params.iter().find(|(k, _)| k == name) {
+                match ctrl {
+                    ParamCtrl::Slider(input) => {
+                        input.set_value(&v.to_string());
+                        let step: f64 = input.step().parse().unwrap_or(1.0);
+                        val_span.set_text_content(Some(&format_val(*v, step)));
+                    }
+                    ParamCtrl::Select(sel) => {
+                        sel.set_value(&v.to_string());
+                    }
+                }
+            }
+        }
+    }
+
     /// Delete the currently selected comparison report.
     pub fn delete_selected_report(&mut self) {
         let val = self.compare_select.value();
@@ -809,6 +907,7 @@ fn build_interactive_view(
     current_scene: usize,
     vp_w: u32,
     vp_h: u32,
+    dirty: &Rc<Cell<bool>>,
 ) -> InteractiveViewParts {
     let view = div(document);
     set(
@@ -940,7 +1039,13 @@ fn build_interactive_view(
     );
     sidebar.append_child(&sep).unwrap();
 
-    let controls = build_controls(document, &sidebar, &scenes[current_scene].params(), None);
+    let controls = build_controls(
+        document,
+        &sidebar,
+        &scenes[current_scene].params(),
+        None,
+        Some(dirty),
+    );
 
     let reset_view_btn = div(document);
     reset_view_btn.set_text_content(Some("Reset View"));
@@ -1209,6 +1314,7 @@ fn build_bench_rows(
     document: &Document,
     bench_defs: &[BenchDef],
     screenshot_img: &HtmlImageElement,
+    dirty: &Rc<Cell<bool>>,
 ) -> BenchRowsParts {
     let container = div(document);
     set(&container, &[("flex", "1"), ("min-width", "0")]);
@@ -1363,11 +1469,13 @@ fn build_bench_rows(
         let cbs = all_bench_cbs.clone();
         let indices = member_indices.clone();
         let gcb = group_cb.clone();
+        let dirty = dirty.clone();
         let handler = Closure::wrap(Box::new(move || {
             let checked = gcb.checked();
             for &idx in &indices {
                 cbs[idx].set_checked(checked);
             }
+            dirty.set(true);
         }) as Box<dyn FnMut()>);
         group_cb
             .add_event_listener_with_callback("change", handler.as_ref().unchecked_ref())
@@ -1381,6 +1489,7 @@ fn build_bench_rows(
         let group_cbs: Vec<HtmlInputElement> =
             group_checkboxes.iter().map(|(cb, _)| cb.clone()).collect();
         let sa_cb = select_all_cb.clone();
+        let dirty = dirty.clone();
         let handler = Closure::wrap(Box::new(move || {
             let checked = sa_cb.checked();
             for cb in cbs.iter() {
@@ -1389,6 +1498,7 @@ fn build_bench_rows(
             for gcb in &group_cbs {
                 gcb.set_checked(checked);
             }
+            dirty.set(true);
         }) as Box<dyn FnMut()>);
         select_all_cb
             .add_event_listener_with_callback("change", handler.as_ref().unchecked_ref())
@@ -1808,6 +1918,7 @@ fn build_controls(
     container: &Element,
     params: &[Param],
     insert_before: Option<&HtmlElement>,
+    dirty: Option<&Rc<Cell<bool>>>,
 ) -> Vec<(ParamCtrl, HtmlElement, &'static str)> {
     let mut out = Vec::new();
 
@@ -1862,9 +1973,13 @@ fn build_controls(
                 let vc = val_span.clone();
                 let ic = input.clone();
                 let st = *step;
+                let dirty = dirty.cloned();
                 let cb = Closure::wrap(Box::new(move || {
                     let v: f64 = ic.value().parse().unwrap_or(0.0);
                     vc.set_text_content(Some(&format_val(v, st)));
+                    if let Some(ref d) = dirty {
+                        d.set(true);
+                    }
                 }) as Box<dyn FnMut()>);
                 input
                     .add_event_listener_with_callback("input", cb.as_ref().unchecked_ref())
@@ -1893,6 +2008,15 @@ fn build_controls(
                 sel.set_selected_index(idx as i32);
                 row.append_child(&sel).unwrap();
 
+                if let Some(dirty) = dirty.cloned() {
+                    let cb = Closure::wrap(Box::new(move || {
+                        dirty.set(true);
+                    }) as Box<dyn FnMut()>);
+                    sel.add_event_listener_with_callback("change", cb.as_ref().unchecked_ref())
+                        .unwrap();
+                    cb.forget();
+                }
+
                 ParamCtrl::Select(sel)
             }
         };
@@ -1907,3 +2031,4 @@ fn build_controls(
 
     out
 }
+
