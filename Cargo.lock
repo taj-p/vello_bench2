@@ -1343,7 +1343,7 @@ dependencies = [
 [[package]]
 name = "vello_api"
 version = "0.7.0"
-source = "git+https://github.com/linebender/vello?rev=7f45113#7f45113b44f862bb101b54238a3e7b8ddf882e50"
+source = "git+https://github.com/linebender/vello?rev=dc82adc4#dc82adc4e39d657151170f82ea2b46b1b69aafca"
 dependencies = [
  "bytemuck",
  "peniko",
@@ -1372,7 +1372,7 @@ dependencies = [
 [[package]]
 name = "vello_common"
 version = "0.0.6"
-source = "git+https://github.com/linebender/vello?rev=7f45113#7f45113b44f862bb101b54238a3e7b8ddf882e50"
+source = "git+https://github.com/linebender/vello?rev=dc82adc4#dc82adc4e39d657151170f82ea2b46b1b69aafca"
 dependencies = [
  "bytemuck",
  "fearless_simd",
@@ -1388,7 +1388,7 @@ dependencies = [
 [[package]]
 name = "vello_hybrid"
 version = "0.0.6"
-source = "git+https://github.com/linebender/vello?rev=7f45113#7f45113b44f862bb101b54238a3e7b8ddf882e50"
+source = "git+https://github.com/linebender/vello?rev=dc82adc4#dc82adc4e39d657151170f82ea2b46b1b69aafca"
 dependencies = [
  "bytemuck",
  "hashbrown 0.16.1",
@@ -1405,7 +1405,7 @@ dependencies = [
 [[package]]
 name = "vello_sparse_shaders"
 version = "0.0.6"
-source = "git+https://github.com/linebender/vello?rev=7f45113#7f45113b44f862bb101b54238a3e7b8ddf882e50"
+source = "git+https://github.com/linebender/vello?rev=dc82adc4#dc82adc4e39d657151170f82ea2b46b1b69aafca"
 dependencies = [
  "naga",
 ]
