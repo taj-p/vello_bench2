@@ -229,6 +229,7 @@ pub async fn run() {
     cs.set_property("position", "fixed").unwrap();
     cs.set_property("top", "40px").unwrap(); // below top bar
     cs.set_property("left", "0").unwrap();
+    cs.set_property("z-index", "0").unwrap();
     cs.set_property("width", &format!("{css_w}px")).unwrap();
     cs.set_property("height", &format!("{}px", css_h.saturating_sub(40)))
         .unwrap();
@@ -462,7 +463,7 @@ fn wire_events(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
     }
 
     wire_pan_zoom(state, window);
-    wire_touch(state, window);
+    wire_touch(state);
     wire_animation_loop(state);
     wire_resize(state);
 }
@@ -581,27 +582,19 @@ fn touch_midpoint(t: &web_sys::TouchList) -> (f64, f64) {
 }
 
 /// Wire touch events for mobile pan (1 finger) and pinch-to-zoom (2 fingers).
-fn wire_touch(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
+fn wire_touch(state: &Rc<RefCell<AppState>>) {
+    let canvas = state.borrow().canvas.clone();
+    let target: &web_sys::EventTarget = canvas.as_ref();
     let opts = web_sys::AddEventListenerOptions::new();
     opts.set_passive(false);
 
     // touchstart
     {
         let s = state.clone();
-        let sidebar = state.borrow().ui.sidebar().clone();
         let cb = Closure::wrap(Box::new(move |e: web_sys::TouchEvent| {
             let mut st = s.borrow_mut();
             if st.ui.mode != AppMode::Interactive {
                 return;
-            }
-            if let Some(target) = e.target() {
-                if let Ok(node) = target.dyn_into::<web_sys::Node>() {
-                    if sidebar.contains(Some(&node)) {
-                        // Let the browser handle sidebar touches normally.
-                        st.touch_count = 0;
-                        return;
-                    }
-                }
             }
             e.prevent_default();
             let touches = e.touches();
@@ -617,7 +610,7 @@ fn wire_touch(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
                 st.touch_last_y = my;
             }
         }) as Box<dyn FnMut(_)>);
-        window
+        target
             .add_event_listener_with_callback_and_add_event_listener_options(
                 "touchstart",
                 cb.as_ref().unchecked_ref(),
@@ -670,7 +663,7 @@ fn wire_touch(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
                 st.touch_count = touches.length();
             }
         }) as Box<dyn FnMut(_)>);
-        window
+        target
             .add_event_listener_with_callback_and_add_event_listener_options(
                 "touchmove",
                 cb.as_ref().unchecked_ref(),
@@ -697,10 +690,10 @@ fn wire_touch(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
                 st.pinch_dist = 0.0;
             }
         }) as Box<dyn FnMut(_)>);
-        window
+        target
             .add_event_listener_with_callback("touchend", cb.as_ref().unchecked_ref())
             .unwrap();
-        window
+        target
             .add_event_listener_with_callback("touchcancel", cb.as_ref().unchecked_ref())
             .unwrap();
         cb.forget();

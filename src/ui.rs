@@ -203,6 +203,7 @@ impl Ui {
                 ("left", "0"),
                 ("right", "0"),
                 ("bottom", "0"),
+                ("z-index", "5"),
                 ("display", "none"),
                 ("overflow-y", "auto"),
                 ("padding", "16px 16px 16px 12px"),
@@ -918,6 +919,8 @@ fn build_interactive_view(
             ("left", "0"),
             ("right", "0"),
             ("bottom", "0"),
+            ("z-index", "5"),
+            ("pointer-events", "none"),
         ],
     );
 
@@ -936,6 +939,7 @@ fn build_interactive_view(
             ("box-sizing", "border-box"),
             ("overflow-y", "auto"),
             ("z-index", "10"),
+            ("pointer-events", "auto"),
             ("transition", "transform 0.2s ease"),
             ("border-right", "1px solid #313244"),
             ("display", "flex"),
@@ -957,6 +961,7 @@ fn build_interactive_view(
             ("border-radius", "0 6px 6px 0"),
             ("cursor", "pointer"),
             ("z-index", "11"),
+            ("pointer-events", "auto"),
             ("display", "flex"),
             ("align-items", "center"),
             ("justify-content", "center"),
