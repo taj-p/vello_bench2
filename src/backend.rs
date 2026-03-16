@@ -1,15 +1,21 @@
 //! Backend abstraction over vello_hybrid (WebGL) and vello_cpu.
 //!
-//! Both backends share the same scene-building API from vello_common,
-//! so the abstraction is thin — mainly around initialization, rendering,
-//! and image upload.
+//! `Backend` wraps the drawing context and renderer into a single type.
+//! Drawing methods are forwarded to the inner context; backend-specific
+//! operations (render, sync, image upload) live on `Backend` directly.
+
+use vello_common::kurbo::{Affine, BezPath, Rect, Stroke};
+use vello_common::paint::{ImageId, PaintType};
+use vello_common::peniko::{Fill, FontData};
+use web_sys::HtmlCanvasElement;
+
+// ── CPU backend ──────────────────────────────────────────────────────────────
 
 #[cfg(feature = "cpu")]
 mod inner {
     use alloc::sync::Arc;
     use vello_common::paint::ImageId;
     pub use vello_cpu::Pixmap;
-    pub use vello_cpu::RenderContext as DrawContext;
     use wasm_bindgen::JsCast;
     use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as GL, WebGlProgram, WebGlTexture};
 
@@ -25,27 +31,24 @@ mod inner {
         uniform sampler2D t;\
         void main(){gl_FragColor=texture2D(t,uv);}";
 
-    pub struct Backend {
+    pub type DrawContext = vello_cpu::RenderContext;
+
+    pub struct BackendInner {
         width: u16,
         height: u16,
         gl: GL,
-        /// Kept alive to prevent the browser from garbage-collecting the GL program.
         #[allow(dead_code)]
         program: WebGlProgram,
         texture: WebGlTexture,
     }
 
-    impl std::fmt::Debug for Backend {
+    impl std::fmt::Debug for BackendInner {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.debug_struct("Backend(cpu)").finish()
         }
     }
 
-    fn pixmap_as_bytes(pixmap: &Pixmap) -> &[u8] {
-        bytemuck::cast_slice(pixmap.data())
-    }
-
-    impl Backend {
+    impl BackendInner {
         pub fn new(canvas: &HtmlCanvasElement) -> Self {
             let gl: GL = canvas
                 .get_context("webgl2")
@@ -102,7 +105,7 @@ mod inner {
             let mut target = Pixmap::new(self.width, self.height);
             ctx.render_to_pixmap(&mut target);
 
-            let bytes = pixmap_as_bytes(&target);
+            let bytes: &[u8] = bytemuck::cast_slice(target.data());
             let gl = &self.gl;
 
             gl.bind_texture(GL::TEXTURE_2D, Some(&self.texture));
@@ -136,24 +139,27 @@ mod inner {
     }
 }
 
+// ── Hybrid (WebGL) backend ───────────────────────────────────────────────────
+
 #[cfg(not(feature = "cpu"))]
 mod inner {
     use vello_common::paint::ImageId;
     pub use vello_hybrid::Pixmap;
-    pub use vello_hybrid::Scene as DrawContext;
     use web_sys::HtmlCanvasElement;
 
-    pub struct Backend {
+    pub type DrawContext = vello_hybrid::Scene;
+
+    pub struct BackendInner {
         renderer: vello_hybrid::WebGlRenderer,
     }
 
-    impl std::fmt::Debug for Backend {
+    impl std::fmt::Debug for BackendInner {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.debug_struct("Backend(hybrid)").finish()
         }
     }
 
-    impl Backend {
+    impl BackendInner {
         pub fn new(canvas: &HtmlCanvasElement) -> Self {
             Self {
                 renderer: vello_hybrid::WebGlRenderer::new(canvas),
@@ -180,9 +186,122 @@ mod inner {
     }
 }
 
-pub use inner::*;
+pub use inner::Pixmap;
+use inner::{BackendInner, DrawContext};
 
-/// Create a new draw context with the given size.
-pub fn new_draw_context(w: u32, h: u32) -> DrawContext {
-    DrawContext::new(w as u16, h as u16)
+// ── Unified Backend ──────────────────────────────────────────────────────────
+
+pub struct Backend {
+    ctx: DrawContext,
+    inner: BackendInner,
+}
+
+impl std::fmt::Debug for Backend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+impl Backend {
+    pub fn new(canvas: &HtmlCanvasElement, w: u32, h: u32) -> Self {
+        let inner = BackendInner::new(canvas);
+        let ctx = DrawContext::new(w as u16, h as u16);
+        Self { ctx, inner }
+    }
+
+    /// Reset the draw context for a new frame.
+    pub fn reset(&mut self) {
+        self.ctx.reset();
+    }
+
+    /// Create a fresh draw context (e.g. for benchmark isolation).
+    pub fn reset_with_size(&mut self, w: u32, h: u32) {
+        self.ctx = DrawContext::new(w as u16, h as u16);
+    }
+
+    /// Render the current frame and present it.
+    pub fn render(&mut self) {
+        self.inner.render(&mut self.ctx);
+    }
+
+    /// Synchronize (wait for GPU on hybrid, no-op on CPU).
+    pub fn sync(&self) {
+        self.inner.sync();
+    }
+
+    /// Notify the backend of a canvas resize.
+    pub fn resize(&mut self, w: u32, h: u32) {
+        self.inner.resize(w, h);
+        self.ctx = DrawContext::new(w as u16, h as u16);
+    }
+
+    /// Upload an image and return its ID.
+    pub fn upload_image(&mut self, pixmap: Pixmap) -> ImageId {
+        self.inner.upload_image(&mut self.ctx, pixmap)
+    }
+
+    // ── Drawing methods (forwarded to inner DrawContext) ─────────────────
+
+    pub fn set_paint(&mut self, paint: impl Into<PaintType>) {
+        self.ctx.set_paint(paint);
+    }
+
+    pub fn set_transform(&mut self, transform: Affine) {
+        self.ctx.set_transform(transform);
+    }
+
+    pub fn reset_transform(&mut self) {
+        self.ctx.reset_transform();
+    }
+
+    pub fn set_stroke(&mut self, stroke: Stroke) {
+        self.ctx.set_stroke(stroke);
+    }
+
+    pub fn set_paint_transform(&mut self, transform: Affine) {
+        self.ctx.set_paint_transform(transform);
+    }
+
+    pub fn reset_paint_transform(&mut self) {
+        self.ctx.reset_paint_transform();
+    }
+
+    pub fn set_fill_rule(&mut self, fill: Fill) {
+        self.ctx.set_fill_rule(fill);
+    }
+
+    pub fn fill_rect(&mut self, rect: &Rect) {
+        self.ctx.fill_rect(rect);
+    }
+
+    pub fn fill_path(&mut self, path: &BezPath) {
+        self.ctx.fill_path(path);
+    }
+
+    pub fn stroke_path(&mut self, path: &BezPath) {
+        self.ctx.stroke_path(path);
+    }
+
+    pub fn push_clip_path(&mut self, path: &BezPath) {
+        self.ctx.push_clip_path(path);
+    }
+
+    pub fn push_clip_layer(&mut self, path: &BezPath) {
+        self.ctx.push_clip_layer(path);
+    }
+
+    pub fn pop_clip_path(&mut self) {
+        self.ctx.pop_clip_path();
+    }
+
+    pub fn pop_layer(&mut self) {
+        self.ctx.pop_layer();
+    }
+
+    pub fn glyph_run(
+        &mut self,
+        font: &FontData,
+    ) -> vello_common::glyph::GlyphRunBuilder<'_, DrawContext> {
+        self.ctx.glyph_run(font)
+    }
 }

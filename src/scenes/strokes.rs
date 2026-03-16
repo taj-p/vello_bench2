@@ -6,7 +6,7 @@
 )]
 
 use super::{BenchScene, Param, ParamKind, bounce, delta_time};
-use crate::backend::{Backend, DrawContext};
+use crate::backend::Backend;
 use crate::rng::Rng;
 use vello_common::kurbo::{Affine, BezPath, Cap, Stroke};
 use vello_common::peniko::Color;
@@ -52,7 +52,7 @@ pub struct StrokesScene {
 }
 
 impl StrokesScene {
-    /// Create a new strokes benchmark scene.
+    /// Create a new strokes benchmark backend.
     pub fn new() -> Self {
         Self {
             num_strokes: 200,
@@ -228,15 +228,7 @@ impl BenchScene for StrokesScene {
         }
     }
 
-    fn render(
-        &mut self,
-        scene: &mut DrawContext,
-        _backend: &mut Backend,
-        width: u32,
-        height: u32,
-        time: f64,
-        view: Affine,
-    ) {
+    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, time: f64, view: Affine) {
         let w = width as f64;
         let h = height as f64;
 
@@ -250,8 +242,8 @@ impl BenchScene for StrokesScene {
             _ => Cap::Butt,
         };
 
-        scene.set_transform(view);
-        scene.set_stroke(Stroke::new(self.stroke_width).with_caps(cap));
+        backend.set_transform(view);
+        backend.set_stroke(Stroke::new(self.stroke_width).with_caps(cap));
 
         let curve_type = self.curve_type;
         let pts_per_seg = points_per_segment(curve_type);
@@ -291,11 +283,11 @@ impl BenchScene for StrokesScene {
                     }
                 }
             }
-            scene.set_paint(s.color);
-            scene.stroke_path(&path);
+            backend.set_paint(s.color);
+            backend.stroke_path(&path);
             path.truncate(0);
         }
 
-        scene.reset_transform();
+        backend.reset_transform();
     }
 }

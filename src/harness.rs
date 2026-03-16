@@ -5,7 +5,7 @@
     reason = "truncation has no appreciable impact in this benchmark"
 )]
 
-use crate::backend::{self, Backend, DrawContext};
+use crate::backend::Backend;
 use crate::scenes::{self, BenchScene};
 use vello_common::kurbo::Affine;
 use web_sys::HtmlCanvasElement;
@@ -69,15 +69,9 @@ pub(crate) struct BenchHarness {
     pub(crate) warmup_ms: f64,
     pub(crate) run_ms: f64,
     pub(crate) results: Vec<BenchResult>,
-    /// Ordered list of bench def indices to run.
     run_order: Vec<usize>,
-    /// Current position within `run_order`.
     run_pos: usize,
-    /// Fresh draw context created per-benchmark.
-    bench_context: Option<DrawContext>,
-    /// Fresh bench scene instances created per-benchmark.
     bench_scenes: Option<Vec<Box<dyn BenchScene>>>,
-    /// Fresh backend created per-benchmark run.
     bench_backend: Option<Backend>,
 }
 
@@ -100,7 +94,6 @@ impl BenchHarness {
             results: Vec::new(),
             run_order: Vec::new(),
             run_pos: 0,
-            bench_context: None,
             bench_scenes: None,
             bench_backend: None,
         }
@@ -117,10 +110,8 @@ impl BenchHarness {
         self.results.clear();
         self.run_order = selected;
         self.run_pos = 0;
-        // Create fresh context and backend for complete isolation from interactive mode.
-        self.bench_context = Some(backend::new_draw_context(width, height));
         self.bench_scenes = Some(scenes::all_scenes());
-        self.bench_backend = Some(Backend::new(canvas));
+        self.bench_backend = Some(Backend::new(canvas, width, height));
         if self.run_order.is_empty() {
             self.phase = Phase::Complete;
         } else {
@@ -146,32 +137,25 @@ impl BenchHarness {
         match self.phase {
             Phase::Idle | Phase::Complete => {}
             Phase::PendingWarmup(idx) => {
-                // Create a fresh draw context for this benchmark to prevent
-                // state leaking between test cases.
-                let ctx = self
-                    .bench_context
-                    .insert(backend::new_draw_context(width, height));
-
                 let def = &defs[idx];
                 let bench_scenes = self.bench_scenes.as_mut().unwrap();
                 let scene = &mut *bench_scenes[def.scene_idx];
                 apply_params(scene, def.params);
 
                 let be = self.bench_backend.as_mut().unwrap();
+                be.reset_with_size(width, height);
                 let perf = web_sys::window().unwrap().performance().unwrap();
 
-                // First frame: generate geometry + capture screenshot
                 let now = perf.now();
-                render_one(scene, ctx, be, width, height, now);
+                render_one(scene, be, width, height, now);
                 be.sync();
                 events.push(HarnessEvent::ScreenshotReady);
 
-                // Warmup loop
                 let start = perf.now();
                 let mut count = 0_usize;
                 loop {
                     let t = perf.now();
-                    render_one(scene, ctx, be, width, height, t);
+                    render_one(scene, be, width, height, t);
                     be.sync();
                     count += 1;
                     if perf.now() - start >= self.warmup_ms {
@@ -191,14 +175,13 @@ impl BenchHarness {
                 let def = &defs[idx];
                 let bench_scenes = self.bench_scenes.as_mut().unwrap();
                 let scene = &mut *bench_scenes[def.scene_idx];
-                let ctx = self.bench_context.as_mut().unwrap();
                 let be = self.bench_backend.as_mut().unwrap();
 
                 let perf = web_sys::window().unwrap().performance().unwrap();
                 let start = perf.now();
                 for _ in 0..target_iters {
                     let t = perf.now();
-                    render_one(scene, ctx, be, width, height, t);
+                    render_one(scene, be, width, height, t);
                     be.sync();
                 }
                 let total_ms = perf.now() - start;
@@ -217,8 +200,6 @@ impl BenchHarness {
                     self.phase = Phase::PendingWarmup(self.run_order[self.run_pos]);
                 } else {
                     self.phase = Phase::Complete;
-                    // Drop benchmark state to free memory.
-                    self.bench_context = None;
                     self.bench_scenes = None;
                     self.bench_backend = None;
                     events.push(HarnessEvent::AllDone);
@@ -240,15 +221,14 @@ fn apply_params(scene: &mut dyn BenchScene, params: &[(&str, f64)]) {
 
 fn render_one(
     bench_scene: &mut dyn BenchScene,
-    ctx: &mut DrawContext,
     backend: &mut Backend,
     width: u32,
     height: u32,
     time: f64,
 ) {
-    ctx.reset();
-    bench_scene.render(ctx, backend, width, height, time, Affine::IDENTITY);
-    backend.render(ctx);
+    backend.reset();
+    bench_scene.render(backend, width, height, time, Affine::IDENTITY);
+    backend.render();
 }
 
 /// All predefined benchmarks.

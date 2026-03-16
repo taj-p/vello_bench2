@@ -21,7 +21,7 @@ pub mod ui;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use backend::{Backend, DrawContext};
+use backend::Backend;
 use fps::FpsTracker;
 use harness::{BenchDef, BenchHarness, HarnessEvent, bench_defs};
 use scenes::BenchScene;
@@ -41,7 +41,6 @@ extern "C" {
 struct AppState {
     scenes: Vec<Box<dyn BenchScene>>,
     current_scene: usize,
-    scene: DrawContext,
     backend: Backend,
     canvas: HtmlCanvasElement,
     width: u32,
@@ -88,8 +87,7 @@ impl AppState {
         let selected = self.ui.selected_scene();
         if selected != self.current_scene && selected < self.scenes.len() {
             self.current_scene = selected;
-            self.backend = Backend::new(&self.canvas);
-            self.scene = backend::new_draw_context(self.width, self.height);
+            self.backend = Backend::new(&self.canvas, self.width, self.height);
             self.scenes = scenes::all_scenes();
             self.reset_view();
             let params = self.scenes[self.current_scene].params();
@@ -106,14 +104,14 @@ impl AppState {
         let perf = web_sys::window().unwrap().performance().unwrap();
         let t0 = perf.now();
 
-        self.scene.reset();
+        self.backend.reset();
         let (w, h) = (self.width, self.height);
         let view = Affine::translate((self.pan_x, self.pan_y)) * Affine::scale(self.zoom);
-        self.scenes[idx].render(&mut self.scene, &mut self.backend, w, h, now, view);
+        self.scenes[idx].render(&mut self.backend, w, h, now, view);
 
         let encode_ms = perf.now() - t0;
 
-        self.backend.render(&mut self.scene);
+        self.backend.render();
         self.backend.sync();
 
         let total_ms = perf.now() - t0;
@@ -250,8 +248,7 @@ pub async fn run() {
         .unwrap_or(0);
 
     let ui = Ui::build(&document, &bench_scenes, &defs, initial_scene, px_w, px_h);
-    let backend = Backend::new(&canvas);
-    let scene = backend::new_draw_context(px_w, px_h);
+    let backend = Backend::new(&canvas, px_w, px_h);
     let now = performance.now();
 
     // Canvas visibility depends on initial mode.
@@ -268,7 +265,6 @@ pub async fn run() {
     let state = Rc::new(RefCell::new(AppState {
         scenes: bench_scenes,
         current_scene: initial_scene,
-        scene,
         backend,
         canvas,
         width: px_w,
@@ -368,7 +364,6 @@ fn wire_events(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
                 st.canvas.set_height(vp_h);
                 st.width = vp_w;
                 st.height = vp_h;
-                st.scene = backend::new_draw_context(vp_w, vp_h);
                 st.backend.resize(vp_w, vp_h);
             }
             st.harness.warmup_ms = st.ui.warmup_ms();
@@ -739,7 +734,6 @@ fn wire_resize(state: &Rc<RefCell<AppState>>) {
             .unwrap();
         st.width = px_w;
         st.height = px_h;
-        st.scene = backend::new_draw_context(px_w, px_h);
         st.backend.resize(px_w, px_h);
         st.ui.update_viewport(px_w, px_h);
     }) as Box<dyn FnMut(_)>);

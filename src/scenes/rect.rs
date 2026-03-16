@@ -6,7 +6,7 @@
 )]
 
 use super::{BenchScene, Param, ParamKind, bounce, delta_time};
-use crate::backend::{Backend, DrawContext, Pixmap};
+use crate::backend::{Backend, Pixmap};
 use crate::rng::Rng;
 use smallvec::smallvec;
 use vello_common::kurbo::{Affine, Point, Rect};
@@ -202,7 +202,7 @@ impl RectScene {
     /// Each image gets a concentric-ring pattern with a unique frequency and
     /// color palette — cheap to compute but produces visible moiré when scaled,
     /// making the difference between nearest-neighbor and bilinear obvious.
-    fn ensure_images(&mut self, scene: &mut DrawContext, backend: &mut Backend) {
+    fn ensure_images(&mut self, backend: &mut Backend) {
         if !self.image_ids.is_empty() && self.images_were_opaque == self.image_opaque {
             return;
         }
@@ -267,7 +267,7 @@ impl RectScene {
 
             let pixmap =
                 Pixmap::from_parts_with_opacity(pixels, IMAGE_SIZE, IMAGE_SIZE, !self.image_opaque);
-            let id = backend.upload_image(scene, pixmap);
+            let id = backend.upload_image(pixmap);
             self.image_ids.push(id);
         }
     }
@@ -367,15 +367,7 @@ impl BenchScene for RectScene {
         }
     }
 
-    fn render(
-        &mut self,
-        scene: &mut DrawContext,
-        backend: &mut Backend,
-        width: u32,
-        height: u32,
-        time: f64,
-        view: Affine,
-    ) {
+    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, time: f64, view: Affine) {
         let w = width as f64;
         let h = height as f64;
 
@@ -386,7 +378,7 @@ impl BenchScene for RectScene {
 
         // Lazily upload images on first use.
         if self.paint_mode == 2 {
-            self.ensure_images(scene, backend);
+            self.ensure_images(backend);
         }
 
         let dt = delta_time(&mut self.last_time, time, self.speed);
@@ -396,7 +388,7 @@ impl BenchScene for RectScene {
         let size = self.rect_size;
         let half = size / 2.0;
 
-        scene.set_transform(view);
+        backend.set_transform(view);
 
         for r in &mut self.rects {
             r.x += r.vx * dt;
@@ -408,7 +400,7 @@ impl BenchScene for RectScene {
             if self.rotated {
                 let cx = r.x + half;
                 let cy = r.y + half;
-                scene.set_transform(
+                backend.set_transform(
                     view * Affine::translate((cx, cy))
                         * Affine::rotate(r.angle)
                         * Affine::translate((-half, -half)),
@@ -424,7 +416,7 @@ impl BenchScene for RectScene {
 
             match self.paint_mode {
                 0 => {
-                    scene.set_paint(r.color);
+                    backend.set_paint(r.color);
                 }
                 1 => {
                     let (gx, gy) = if self.rotated { (0.0, 0.0) } else { (r.x, r.y) };
@@ -512,7 +504,7 @@ impl BenchScene for RectScene {
                         extend: Extend::Pad,
                         ..Default::default()
                     };
-                    scene.set_paint(gradient);
+                    backend.set_paint(gradient);
                 }
                 _ => {
                     // Image paint mode.
@@ -533,23 +525,23 @@ impl BenchScene for RectScene {
                     // Scale image to fill the rect.
                     let scale = size / IMAGE_SIZE as f64;
                     if self.rotated {
-                        scene.set_paint_transform(Affine::scale(scale));
+                        backend.set_paint_transform(Affine::scale(scale));
                     } else {
-                        scene.set_paint_transform(
+                        backend.set_paint_transform(
                             Affine::translate((r.x, r.y)) * Affine::scale(scale),
                         );
                     }
-                    scene.set_paint(image);
+                    backend.set_paint(image);
                 }
             }
 
-            scene.fill_rect(&rect);
+            backend.fill_rect(&rect);
 
             if self.rotated {
-                scene.set_transform(view);
+                backend.set_transform(view);
             }
             if self.paint_mode == 2 {
-                scene.reset_paint_transform();
+                backend.reset_paint_transform();
             }
         }
     }

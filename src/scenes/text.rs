@@ -1,4 +1,4 @@
-//! Animated text benchmark scene.
+//! Animated text benchmark backend.
 
 #![allow(
     clippy::cast_possible_truncation,
@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use super::{BenchScene, Param, ParamKind, bounce, delta_time};
-use crate::backend::{Backend, DrawContext};
+use crate::backend::Backend;
 use crate::rng::Rng;
 use skrifa::MetadataProvider;
 use skrifa::raw::FileRef;
@@ -169,15 +169,7 @@ impl BenchScene for TextScene {
         }
     }
 
-    fn render(
-        &mut self,
-        scene: &mut DrawContext,
-        _backend: &mut Backend,
-        width: u32,
-        height: u32,
-        time: f64,
-        view: Affine,
-    ) {
+    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, time: f64, view: Affine) {
         let w = width as f64;
         let h = height as f64;
 
@@ -187,7 +179,7 @@ impl BenchScene for TextScene {
 
         let dt = delta_time(&mut self.last_time, time, self.speed);
 
-        scene.set_transform(view);
+        backend.set_transform(view);
 
         for run in &mut self.runs {
             run.x += run.vx * dt;
@@ -195,7 +187,7 @@ impl BenchScene for TextScene {
             bounce(&mut run.x, &mut run.vx, (w - run.run_width as f64).max(0.0));
             bounce(&mut run.y, &mut run.vy, h);
 
-            scene.set_paint(run.color);
+            backend.set_paint(run.color);
 
             let glyphs = run.glyphs.iter().map(|&(id, x)| Glyph {
                 id,
@@ -203,7 +195,7 @@ impl BenchScene for TextScene {
                 y: run.y as f32,
             });
 
-            scene
+            backend
                 .glyph_run(&self.font_data)
                 .font_size(self.font_size)
                 .hint(true)

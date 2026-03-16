@@ -1,4 +1,4 @@
-//! Clip path benchmark scene.
+//! Clip path benchmark backend.
 
 #![allow(
     clippy::cast_possible_truncation,
@@ -8,7 +8,7 @@
 use std::f64::consts::{FRAC_PI_2, PI};
 
 use super::{BenchScene, Param, ParamKind, bounce, delta_time};
-use crate::backend::{Backend, DrawContext};
+use crate::backend::Backend;
 use crate::rng::Rng;
 use vello_common::kurbo::{Affine, BezPath, Point, Rect, Vec2};
 use vello_common::peniko::Color;
@@ -39,7 +39,7 @@ pub struct ClipScene {
 }
 
 impl ClipScene {
-    /// Create a new clip path benchmark scene.
+    /// Create a new clip path benchmark backend.
     pub fn new() -> Self {
         Self {
             num_rects: 500,
@@ -144,15 +144,7 @@ impl BenchScene for ClipScene {
         }
     }
 
-    fn render(
-        &mut self,
-        scene: &mut DrawContext,
-        _backend: &mut Backend,
-        width: u32,
-        height: u32,
-        time: f64,
-        view: Affine,
-    ) {
+    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, time: f64, view: Affine) {
         let w = width as f64;
         let h = height as f64;
 
@@ -163,7 +155,7 @@ impl BenchScene for ClipScene {
         let size = self.rect_size;
         let use_clip_layer = self.clip_method == 1;
 
-        scene.set_transform(view);
+        backend.set_transform(view);
 
         // Mode 1: single global star clip covering the viewport.
         if self.clip_mode == 1 {
@@ -173,9 +165,9 @@ impl BenchScene for ClipScene {
             let inner = outer * 0.4;
             let clip = star_path(Point::new(cx, cy), inner, outer);
             if use_clip_layer {
-                scene.push_clip_layer(&clip);
+                backend.push_clip_layer(&clip);
             } else {
-                scene.push_clip_path(&clip);
+                backend.push_clip_path(&clip);
             }
         }
 
@@ -193,33 +185,33 @@ impl BenchScene for ClipScene {
                 let inner = outer * 0.4;
                 let clip = star_path(Point::new(cx, cy), inner, outer);
                 if use_clip_layer {
-                    scene.push_clip_layer(&clip);
+                    backend.push_clip_layer(&clip);
                 } else {
-                    scene.push_clip_path(&clip);
+                    backend.push_clip_path(&clip);
                 }
             }
 
             let rect = Rect::new(r.x, r.y, r.x + size, r.y + size);
-            scene.set_paint(r.color);
-            scene.fill_rect(&rect);
+            backend.set_paint(r.color);
+            backend.fill_rect(&rect);
 
             if self.clip_mode == 2 {
                 if use_clip_layer {
-                    scene.pop_layer();
+                    backend.pop_layer();
                 } else {
-                    scene.pop_clip_path();
+                    backend.pop_clip_path();
                 }
             }
         }
 
         if self.clip_mode == 1 {
             if use_clip_layer {
-                scene.pop_layer();
+                backend.pop_layer();
             } else {
-                scene.pop_clip_path();
+                backend.pop_clip_path();
             }
         }
 
-        scene.reset_transform();
+        backend.reset_transform();
     }
 }

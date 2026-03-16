@@ -6,7 +6,7 @@
 )]
 
 use super::{BenchScene, Param, ParamKind};
-use crate::backend::{Backend, DrawContext};
+use crate::backend::Backend;
 use usvg::tiny_skia_path::PathSegment;
 use usvg::{Group, Node};
 use vello_common::kurbo::{Affine, BezPath, Stroke};
@@ -249,15 +249,7 @@ impl BenchScene for SvgScene {
         }
     }
 
-    fn render(
-        &mut self,
-        scene: &mut DrawContext,
-        _backend: &mut Backend,
-        width: u32,
-        height: u32,
-        _time: f64,
-        view: Affine,
-    ) {
+    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, _time: f64, view: Affine) {
         let asset = &self.assets[self.selected];
 
         // Scale to fit viewport, center.
@@ -273,9 +265,9 @@ impl BenchScene for SvgScene {
                     transform,
                     color,
                 } => {
-                    scene.set_transform(base * *transform);
-                    scene.set_paint(*color);
-                    scene.fill_path(path);
+                    backend.set_transform(base * *transform);
+                    backend.set_paint(*color);
+                    backend.fill_path(path);
                 }
                 DrawCmd::Stroke {
                     path,
@@ -283,21 +275,21 @@ impl BenchScene for SvgScene {
                     color,
                     width,
                 } => {
-                    scene.set_transform(base * *transform);
-                    scene.set_paint(*color);
-                    scene.set_stroke(Stroke::new(*width));
-                    scene.stroke_path(path);
+                    backend.set_transform(base * *transform);
+                    backend.set_paint(*color);
+                    backend.set_stroke(Stroke::new(*width));
+                    backend.stroke_path(path);
                 }
                 DrawCmd::PushClip { path, transform } => {
-                    scene.set_transform(base * *transform);
-                    scene.push_clip_path(path);
+                    backend.set_transform(base * *transform);
+                    backend.push_clip_path(path);
                 }
                 DrawCmd::PopClip => {
-                    scene.pop_clip_path();
+                    backend.pop_clip_path();
                 }
             }
         }
 
-        scene.reset_transform();
+        backend.reset_transform();
     }
 }

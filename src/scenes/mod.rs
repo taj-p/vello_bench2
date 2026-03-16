@@ -7,7 +7,7 @@ mod strokes;
 mod svg;
 mod text;
 
-use crate::backend::{Backend, DrawContext};
+use crate::backend::Backend;
 pub use clip::ClipScene;
 pub use polyline::PolylineScene;
 pub use rect::RectScene;
@@ -57,15 +57,7 @@ pub trait BenchScene {
     ///
     /// `view` is a view transform (e.g. pan/zoom) applied by the interactive mode.
     /// Scenes should compose it with their own transforms.
-    fn render(
-        &mut self,
-        scene: &mut DrawContext,
-        backend: &mut Backend,
-        width: u32,
-        height: u32,
-        time: f64,
-        view: Affine,
-    );
+    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, time: f64, view: Affine);
 }
 
 // ── Shared animation helpers ─────────────────────────────────────────────────

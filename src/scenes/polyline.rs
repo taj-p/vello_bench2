@@ -1,4 +1,4 @@
-//! Filled polyline benchmark scene.
+//! Filled polyline benchmark backend.
 
 #![allow(
     clippy::cast_possible_truncation,
@@ -6,7 +6,7 @@
 )]
 
 use super::{BenchScene, Param, ParamKind, bounce, delta_time};
-use crate::backend::{Backend, DrawContext};
+use crate::backend::Backend;
 use crate::rng::Rng;
 use vello_common::kurbo::{Affine, BezPath};
 use vello_common::peniko::{Color, Fill};
@@ -31,7 +31,7 @@ pub struct PolylineScene {
 }
 
 impl PolylineScene {
-    /// Create a new polyline benchmark scene.
+    /// Create a new polyline benchmark backend.
     pub fn new() -> Self {
         Self {
             num_vertices: 100,
@@ -83,15 +83,7 @@ impl BenchScene for PolylineScene {
         }
     }
 
-    fn render(
-        &mut self,
-        scene: &mut DrawContext,
-        _backend: &mut Backend,
-        width: u32,
-        height: u32,
-        time: f64,
-        view: Affine,
-    ) {
+    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, time: f64, view: Affine) {
         let w = width as f64;
         let h = height as f64;
 
@@ -113,10 +105,10 @@ impl BenchScene for PolylineScene {
         }
         path.close_path();
 
-        scene.set_transform(view);
-        scene.set_paint(Color::from_rgba8(66, 135, 245, 180));
-        scene.set_fill_rule(Fill::EvenOdd);
-        scene.fill_path(&path);
-        scene.reset_transform();
+        backend.set_transform(view);
+        backend.set_paint(Color::from_rgba8(66, 135, 245, 180));
+        backend.set_fill_rule(Fill::EvenOdd);
+        backend.fill_path(&path);
+        backend.reset_transform();
     }
 }
