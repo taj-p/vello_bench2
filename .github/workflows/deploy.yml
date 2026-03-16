@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -25,8 +25,28 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
+      - name: Cache Cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: wasm-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: wasm-cargo-
+
+      - name: Cache wasm-bindgen-cli
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-${{ hashFiles('Cargo.lock') }}
+          restore-keys: wasm-bindgen-
+
       - name: Install wasm-bindgen-cli
-        run: cargo install wasm-bindgen-cli
+        run: |
+          if ! command -v wasm-bindgen &> /dev/null; then
+            cargo install wasm-bindgen-cli
+          fi
 
       - name: Build wasm (release + SIMD)
         run: cargo build --target wasm32-unknown-unknown --release
