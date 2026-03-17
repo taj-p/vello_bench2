@@ -62,3 +62,8 @@ web-sys = { version = "0.3.83", features = [
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 cargo-run-wasm = "0.4.0"
+
+[profile.instrument]
+inherits = "release"
+debug = true
+strip = "none"
