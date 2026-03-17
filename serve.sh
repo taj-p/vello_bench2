@@ -21,9 +21,16 @@ build_variant() {
     target/$TARGET/instrument/vello_bench2.wasm
 }
 
-# Parse filter from first argument (default: build all).
-# Accepts: hybrid, cpu, simd, nosimd, hybrid-simd, hybrid-nosimd, cpu-simd, cpu-nosimd
-FILTER="${1:-all}"
+# Parse arguments.
+FILTER="all"
+BIND_ADDR="127.0.0.1"
+
+for arg in "$@"; do
+  case "$arg" in
+    --global) BIND_ADDR="0.0.0.0" ;;
+    *) FILTER="$arg" ;;
+  esac
+done
 
 should_build() {
   local out_dir=$1
@@ -40,9 +47,11 @@ should_build cpu-nosimd    && build_variant cpu    ""                          c
 
 cp web/index.html "$DIST/index.html"
 
-LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "<your-ip>")
 echo "==> Serving at http://localhost:8080"
-echo "==> On your tablet, open http://$LOCAL_IP:8080"
+if [[ "$BIND_ADDR" == "0.0.0.0" ]]; then
+  LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "<your-ip>")
+  echo "==> On your tablet, open http://$LOCAL_IP:8080"
+fi
 python3 -c "
 import http.server, os
 
@@ -55,5 +64,5 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         super().end_headers()
 
-http.server.HTTPServer(('0.0.0.0', 8080), Handler).serve_forever()
+http.server.HTTPServer(('$BIND_ADDR', 8080), Handler).serve_forever()
 "
