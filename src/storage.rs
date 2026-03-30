@@ -83,6 +83,8 @@ pub(crate) struct UiState {
     /// Checked benchmark indices (benchmark mode).
     #[serde(default)]
     pub(crate) benches: Vec<usize>,
+    /// Benchmark preset scale (benchmark mode).
+    pub(crate) bench_preset: Option<u32>,
 }
 
 /// Load persisted UI state.

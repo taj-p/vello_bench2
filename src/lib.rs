@@ -296,6 +296,7 @@ pub async fn run() {
         let mut st = state.borrow_mut();
         st.ui.set_mode(initial_mode);
         st.ui.apply_saved_benches(&saved_state);
+        st.ui.apply_saved_bench_preset(&saved_state);
         st.ui.apply_saved_params(&saved_state);
         st.ui.save_state();
     }
@@ -375,6 +376,7 @@ fn wire_events(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
             }
             st.harness.warmup_ms = st.ui.warmup_ms();
             st.harness.run_ms = st.ui.run_ms();
+            st.harness.preset = st.ui.bench_preset();
             st.ui.bench_started(&selected);
             let (w, h) = (st.width, st.height);
             let canvas = st.canvas.clone();
@@ -464,6 +466,21 @@ fn wire_events(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
                 .unwrap();
             cb.forget();
         }
+    }
+
+    // Preset changes → mark dirty
+    {
+        let input = state.borrow().ui.preset_input().clone();
+        let s = state.clone();
+        let cb = Closure::wrap(Box::new(move || {
+            let st = s.borrow_mut();
+            st.ui.update_bench_titles();
+            st.ui.mark_dirty();
+        }) as Box<dyn FnMut()>);
+        input
+            .add_event_listener_with_callback("input", cb.as_ref().unchecked_ref())
+            .unwrap();
+        cb.forget();
     }
 
     wire_pan_zoom(state, window);

@@ -8,7 +8,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use crate::harness::{BenchDef, BenchResult};
+use crate::harness::{BenchDef, BenchResult, BenchScale};
 use crate::scenes::{BenchScene, Param, ParamKind};
 use crate::storage::{BenchReport, UiState};
 use wasm_bindgen::prelude::*;
@@ -155,11 +155,13 @@ struct BenchRowState {
     checkbox: HtmlInputElement,
     row: HtmlElement,
     status_dot: HtmlElement,
+    name_el: HtmlElement,
     result_text: HtmlElement,
     result_line: HtmlElement,
     screenshot_data: Rc<RefCell<String>>,
     delta_text: HtmlElement,
     name: &'static str,
+    scale: Option<BenchScale>,
 }
 
 // ── UI ───────────────────────────────────────────────────────────────────────
@@ -194,6 +196,8 @@ pub struct Ui {
 
     // Benchmark
     warmup_input: HtmlInputElement,
+    preset_input: HtmlInputElement,
+    preset_value_label: HtmlElement,
     run_input: HtmlInputElement,
     /// Start button.
     pub start_btn: HtmlElement,
@@ -327,6 +331,8 @@ impl Ui {
             controls: iv.controls,
             reset_view_btn: iv.reset_view_btn,
             warmup_input: cfg.warmup_input,
+            preset_input: cfg.preset_input,
+            preset_value_label: cfg.preset_value_label,
             run_input: cfg.run_input,
             start_btn: cfg.start_btn,
             bench_rows: rows.bench_rows,
@@ -524,9 +530,32 @@ impl Ui {
         self.run_input.value().parse().unwrap_or(1000.0)
     }
 
+    /// Read benchmark preset from input.
+    pub fn bench_preset(&self) -> u32 {
+        self.preset_input
+            .value()
+            .parse::<u32>()
+            .unwrap_or(10)
+            .clamp(1, 20)
+    }
+
+    pub fn update_bench_titles(&self) {
+        let preset = self.bench_preset();
+        self.preset_value_label
+            .set_text_content(Some(&preset.to_string()));
+        for row in &self.bench_rows {
+            let title = format_bench_title(row.name, row.scale, preset);
+            row.name_el.set_text_content(Some(&title));
+        }
+    }
+
     /// Start button ref.
     pub fn start_btn(&self) -> &HtmlElement {
         &self.start_btn
+    }
+
+    pub fn preset_input(&self) -> &HtmlInputElement {
+        &self.preset_input
     }
 
     /// Return indices of checked benchmarks.
@@ -864,6 +893,7 @@ impl Ui {
             scene: Some(scene),
             params,
             benches,
+            bench_preset: Some(self.bench_preset()),
         });
     }
 
@@ -876,6 +906,14 @@ impl Ui {
         for (i, r) in self.bench_rows.iter().enumerate() {
             r.checkbox.set_checked(set.contains(&i));
         }
+    }
+
+    pub(crate) fn apply_saved_bench_preset(&self, saved: &UiState) {
+        if let Some(preset) = saved.bench_preset {
+            self.preset_input
+                .set_value(&preset.clamp(1, 20).to_string());
+        }
+        self.update_bench_titles();
     }
 
     /// Apply saved interactive param values.
@@ -938,6 +976,43 @@ fn format_delta(el: &HtmlElement, cur_ms: Option<f64>, base_ms: Option<f64>) {
     el.style().set_property("display", "block").unwrap();
 }
 
+fn format_bench_title(name: &str, scale: Option<BenchScale>, preset: u32) -> String {
+    if let Some(scale) = scale {
+        format!(
+            "{} {}",
+            short_count(crate::harness::scaled_count(scale.calibrated_value, preset)),
+            name
+        )
+    } else {
+        name.to_string()
+    }
+}
+
+fn short_count(count: usize) -> String {
+    if count < 1_000 {
+        return count.to_string();
+    }
+    if count < 10_000 {
+        let value = count as f64 / 1_000.0;
+        let tenths = (value * 10.0).round() as usize;
+        return if tenths % 10 == 0 {
+            format!("{}k", tenths / 10)
+        } else {
+            format!("{}.{}k", tenths / 10, tenths % 10)
+        };
+    }
+    if count < 1_000_000 {
+        return format!("{}k", ((count as f64) / 1_000.0).round() as usize);
+    }
+    let value = count as f64 / 1_000_000.0;
+    let tenths = (value * 10.0).round() as usize;
+    if tenths % 10 == 0 {
+        format!("{}m", tenths / 10)
+    } else {
+        format!("{}.{}m", tenths / 10, tenths % 10)
+    }
+}
+
 // ── Builder return types ─────────────────────────────────────────────────────
 
 struct InteractiveViewParts {
@@ -958,6 +1033,8 @@ struct InteractiveViewParts {
 struct BenchConfigParts {
     wrapper: HtmlElement,
     warmup_input: HtmlInputElement,
+    preset_input: HtmlInputElement,
+    preset_value_label: HtmlElement,
     run_input: HtmlInputElement,
     start_btn: HtmlElement,
     vp_width_input: HtmlInputElement,
@@ -1364,6 +1441,13 @@ fn build_bench_config(document: &Document, vp_w: u32, vp_h: u32) -> BenchConfigP
         .append_child(&section_label(document, "Run Config"))
         .unwrap();
 
+    let preset_input = slider_input(document, "Preset", "10", "1", "20");
+    preset_input
+        .0
+        .style()
+        .set_property("margin-bottom", "6px")
+        .unwrap();
+    left_col.append_child(&preset_input.0).unwrap();
     let warmup_input = num_input(document, "Warmup", "250");
     warmup_input
         .0
@@ -1544,6 +1628,8 @@ fn build_bench_config(document: &Document, vp_w: u32, vp_h: u32) -> BenchConfigP
     BenchConfigParts {
         wrapper,
         warmup_input: warmup_input.1,
+        preset_input: preset_input.1,
+        preset_value_label: preset_input.2,
         run_input: run_input.1,
         start_btn,
         vp_width_input,
@@ -1821,7 +1907,7 @@ fn build_single_bench_row(
     set(&info, &[("flex", "1"), ("min-width", "0")]);
 
     let name_el = div(document);
-    name_el.set_text_content(Some(def.name));
+    name_el.set_text_content(Some(&format_bench_title(def.name, def.scale, 18)));
     set(
         &name_el,
         &[
@@ -1963,11 +2049,13 @@ fn build_single_bench_row(
         checkbox: cb,
         row,
         status_dot: dot,
+        name_el,
         result_text,
         result_line,
         screenshot_data,
         delta_text,
         name: def.name,
+        scale: def.scale,
     }
 }
 
@@ -2128,6 +2216,82 @@ fn num_input(document: &Document, label: &str, default: &str) -> (HtmlElement, H
     wrapper.append_child(&ms).unwrap();
 
     (wrapper, input)
+}
+
+fn slider_input(
+    document: &Document,
+    label: &str,
+    default: &str,
+    min: &str,
+    max: &str,
+) -> (HtmlElement, HtmlInputElement, HtmlElement) {
+    let wrapper = div(document);
+    set(
+        &wrapper,
+        &[
+            ("display", "flex"),
+            ("flex-direction", "column"),
+            ("gap", "4px"),
+        ],
+    );
+
+    let header = div(document);
+    set(
+        &header,
+        &[
+            ("display", "flex"),
+            ("justify-content", "space-between"),
+            ("gap", "8px"),
+        ],
+    );
+
+    let lbl = div(document);
+    lbl.set_text_content(Some(label));
+    set(&lbl, &[("color", "#9399b2"), ("font-size", "12px")]);
+    header.append_child(&lbl).unwrap();
+
+    let value = div(document);
+    value.set_text_content(Some(default));
+    set(
+        &value,
+        &[
+            ("color", "#cdd6f4"),
+            ("font-size", "12px"),
+            ("font-weight", "600"),
+        ],
+    );
+    header.append_child(&value).unwrap();
+
+    wrapper.append_child(&header).unwrap();
+
+    let input: HtmlInputElement = document
+        .create_element("input")
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    input.set_type("range");
+    input.set_min(min);
+    input.set_max(max);
+    input.set_step("1");
+    input.set_value(default);
+    set_prop(&input, "width", "100%");
+    set_prop(&input, "accent-color", "#89b4fa");
+    set_prop(&input, "margin", "0");
+    wrapper.append_child(&input).unwrap();
+
+    {
+        let input_for_cb = input.clone();
+        let value = value.clone();
+        let cb = Closure::wrap(Box::new(move || {
+            value.set_text_content(Some(&input_for_cb.value()));
+        }) as Box<dyn FnMut()>);
+        input
+            .add_event_listener_with_callback("input", cb.as_ref().unchecked_ref())
+            .unwrap();
+        cb.forget();
+    }
+
+    (wrapper, input, value)
 }
 
 fn sized_num_input(document: &Document, default: &str, width: &str) -> HtmlInputElement {
