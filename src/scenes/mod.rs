@@ -1,6 +1,7 @@
 //! Benchmark scene definitions.
 
 mod clip;
+mod filter_layers;
 mod polyline;
 mod rect;
 mod strokes;
@@ -9,6 +10,7 @@ mod text;
 
 use crate::backend::Backend;
 pub use clip::ClipScene;
+pub use filter_layers::FilterLayersScene;
 pub use polyline::PolylineScene;
 pub use rect::RectScene;
 pub use strokes::StrokesScene;
@@ -93,5 +95,6 @@ pub fn all_scenes() -> Vec<Box<dyn BenchScene>> {
         Box::new(SvgScene::new()),
         Box::new(ClipScene::new()),
         Box::new(TextScene::new()),
+        Box::new(FilterLayersScene::new()),
     ]
 }

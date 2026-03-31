@@ -4,6 +4,7 @@
 //! Drawing methods are forwarded to the inner context; backend-specific
 //! operations (render, sync, image upload) live on `Backend` directly.
 
+use vello_common::filter_effects::Filter;
 use vello_common::kurbo::{Affine, BezPath, Rect, Stroke};
 use vello_common::paint::{ImageSource, PaintType};
 use vello_common::peniko::{Fill, FontData};
@@ -311,6 +312,10 @@ impl Backend {
         self.ctx.push_clip_layer(path);
     }
 
+    pub fn push_filter_layer(&mut self, filter: Filter) {
+        self.ctx.push_filter_layer(filter);
+    }
+
     pub fn pop_clip_path(&mut self) {
         self.ctx.pop_clip_path();
     }
@@ -331,33 +336,34 @@ impl Backend {
     /// On the hybrid backend this uses the GPU fast path (`Scene::draw_image`).
     /// On the CPU backend this falls back to image paint with Pad extend.
     pub fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool) {
-        #[cfg(not(feature = "cpu"))]
-        {
-            self.ctx.draw_image(image, rect, bilinear);
-        }
-        #[cfg(feature = "cpu")]
-        {
-            use vello_common::paint::Image;
-            use vello_common::peniko::{Extend, ImageQuality, ImageSampler};
-            let old_paint_transform = *self.ctx.paint_transform();
-            let old_paint = self.ctx.paint().clone();
-            self.ctx.set_paint_transform(Affine::IDENTITY);
-            self.ctx.set_paint(Image {
-                image,
-                sampler: ImageSampler {
-                    x_extend: Extend::Pad,
-                    y_extend: Extend::Pad,
-                    quality: if bilinear {
-                        ImageQuality::Medium
-                    } else {
-                        ImageQuality::Low
-                    },
-                    alpha: 1.0,
-                },
-            });
-            self.ctx.fill_rect(rect);
-            self.ctx.set_paint_transform(old_paint_transform);
-            self.ctx.set_paint(old_paint);
-        }
+        // TODO: Re-add this once bilinear image painting has been merged to main.
+        // #[cfg(not(feature = "cpu"))]
+        // {
+        //     self.ctx.draw_image(image, rect, bilinear);
+        // }
+        // #[cfg(feature = "cpu")]
+        // {
+        //     use vello_common::paint::Image;
+        //     use vello_common::peniko::{Extend, ImageQuality, ImageSampler};
+        //     let old_paint_transform = *self.ctx.paint_transform();
+        //     let old_paint = self.ctx.paint().clone();
+        //     self.ctx.set_paint_transform(Affine::IDENTITY);
+        //     self.ctx.set_paint(Image {
+        //         image,
+        //         sampler: ImageSampler {
+        //             x_extend: Extend::Pad,
+        //             y_extend: Extend::Pad,
+        //             quality: if bilinear {
+        //                 ImageQuality::Medium
+        //             } else {
+        //                 ImageQuality::Low
+        //             },
+        //             alpha: 1.0,
+        //         },
+        //     });
+        //     self.ctx.fill_rect(rect);
+        //     self.ctx.set_paint_transform(old_paint_transform);
+        //     self.ctx.set_paint(old_paint);
+        // }
     }
 }
