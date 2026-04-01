@@ -40,10 +40,6 @@ impl BackendImpl {
         self.ctx.reset();
     }
 
-    pub fn reset_with_size(&mut self, w: u32, h: u32) {
-        self.ctx = vello_hybrid::Scene::new(w as u16, h as u16);
-    }
-
     pub fn render_offscreen(&mut self) {
         let rs = vello_hybrid::RenderSize {
             width: self.ctx.width() as u32,

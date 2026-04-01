@@ -104,10 +104,6 @@ impl BackendImpl {
         self.ctx.reset();
     }
 
-    pub fn reset_with_size(&mut self, w: u32, h: u32) {
-        self.ctx = vello_cpu::RenderContext::new(w as u16, h as u16);
-    }
-
     pub fn render_offscreen(&mut self) {
         self.ctx.flush();
         self.target = Some(Pixmap::new(self.width, self.height));

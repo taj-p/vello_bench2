@@ -103,10 +103,6 @@ impl BackendImpl {
         self.ctx.reset();
     }
 
-    pub fn reset_with_size(&mut self, w: u32, h: u32) {
-        self.ctx = DrawContext::new(w as u16, h as u16);
-    }
-
     pub fn render_offscreen(&mut self) {
         if let Some(canvas) = self.ctx.canvas.take() {
             let mut scene = canvas.into_canvas().into_scene();
@@ -151,7 +147,6 @@ impl BackendImpl {
     pub fn set_stroke(&mut self, stroke: Stroke) {
         self.ctx.set_stroke(stroke);
     }
-    
 
     pub fn set_paint_transform(&mut self, _transform: Affine) {}
 

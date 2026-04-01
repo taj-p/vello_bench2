@@ -85,10 +85,6 @@ impl Backend {
         self.inner.reset();
     }
 
-    pub fn reset_with_size(&mut self, w: u32, h: u32) {
-        self.inner.reset_with_size(w, h);
-    }
-
     pub fn render_offscreen(&mut self) {
         self.inner.render_offscreen();
     }
