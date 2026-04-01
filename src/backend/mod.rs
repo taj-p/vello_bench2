@@ -11,20 +11,20 @@ use crate::scenes::{ParamId, SceneId};
 
 #[cfg(feature = "cpu")]
 mod cpu;
-#[cfg(all(not(feature = "cpu"), feature = "pathfinder"))]
-mod pathfinder;
 #[cfg(all(not(feature = "cpu"), not(feature = "pathfinder")))]
 mod hybrid;
+#[cfg(all(not(feature = "cpu"), feature = "pathfinder"))]
+mod pathfinder;
 
 #[cfg(feature = "cpu")]
 use cpu as selected;
-#[cfg(all(not(feature = "cpu"), feature = "pathfinder"))]
-use pathfinder as selected;
 #[cfg(all(not(feature = "cpu"), not(feature = "pathfinder")))]
 use hybrid as selected;
+#[cfg(all(not(feature = "cpu"), feature = "pathfinder"))]
+use pathfinder as selected;
 
-pub use selected::Pixmap;
 use selected::BackendImpl;
+pub use selected::Pixmap;
 
 pub trait Renderer {
     fn supports_encode_timing(&self) -> bool;

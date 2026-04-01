@@ -126,7 +126,8 @@ fn visible_params_for_scene(
     scene: &dyn BenchScene,
     capabilities: BackendCapabilities,
 ) -> Vec<Param> {
-    scene.params()
+    scene
+        .params()
         .into_iter()
         .filter(|param| capabilities.supports_param(scene.scene_id(), param.id))
         .collect()

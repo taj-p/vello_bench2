@@ -219,12 +219,20 @@ impl BenchHarness {
     }
 }
 
-fn apply_params(scene: &mut dyn BenchScene, params: &[(ParamId, f64)], scale: Option<BenchScale>, preset: u32) {
+fn apply_params(
+    scene: &mut dyn BenchScene,
+    params: &[(ParamId, f64)],
+    scale: Option<BenchScale>,
+    preset: u32,
+) {
     for &(param, value) in params {
         scene.set_param(param, value);
     }
     if let Some(scale) = scale {
-        scene.set_param(scale.param, scaled_count(scale.calibrated_value, preset) as f64);
+        scene.set_param(
+            scale.param,
+            scaled_count(scale.calibrated_value, preset) as f64,
+        );
     }
     // Always force speed=0 for deterministic benchmarks.
     scene.set_param(ParamId::Speed, 0.0);

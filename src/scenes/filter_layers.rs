@@ -71,7 +71,6 @@ impl FilterLayersScene {
             self.rects.truncate(self.num_rects);
         }
     }
-
 }
 
 fn make_filter(

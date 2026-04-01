@@ -84,12 +84,7 @@ impl BackendImpl {
         let mode = RendererMode::default_for_device(&device);
         let options = RendererOptions {
             dest: DestFramebuffer::full_window(framebuffer_size),
-            background_color: Some(ColorF::new(
-                17.0 / 255.0,
-                17.0 / 255.0,
-                27.0 / 255.0,
-                1.0,
-            )),
+            background_color: Some(ColorF::new(17.0 / 255.0, 17.0 / 255.0, 27.0 / 255.0, 1.0)),
             ..RendererOptions::default()
         };
         let loader = EmbeddedResourceLoader::new();
@@ -190,7 +185,14 @@ impl BackendImpl {
         self.ctx.pop_layer();
     }
 
-    pub fn fill_glyphs(&mut self, _font: &FontData, _font_size: f32, _hint: bool, _glyphs: &[Glyph]) {}
+    pub fn fill_glyphs(
+        &mut self,
+        _font: &FontData,
+        _font_size: f32,
+        _hint: bool,
+        _glyphs: &[Glyph],
+    ) {
+    }
 
     pub fn draw_image(&mut self, _image: ImageSource, _rect: &Rect, _bilinear: bool) {}
 }

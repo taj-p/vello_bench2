@@ -129,7 +129,8 @@ impl BackendImpl {
             )
             .unwrap();
 
-        self.gl.viewport(0, 0, self.width as i32, self.height as i32);
+        self.gl
+            .viewport(0, 0, self.width as i32, self.height as i32);
         self.gl.draw_arrays(GL::TRIANGLE_STRIP, 0, 4);
     }
 
