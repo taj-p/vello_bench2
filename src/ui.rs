@@ -1257,51 +1257,50 @@ fn build_top_bar(document: &Document) -> (HtmlElement, HtmlElement, HtmlElement,
             cb.forget();
         }
         top_bar.append_child(&simd_btn).unwrap();
-
-        // Renderer toggle (hybrid / cpu / pathfinder / canvas2d).
-        let renderer_name = js_sys::Reflect::get(&js_sys::global(), &"__vello_renderer".into())
-            .ok()
-            .and_then(|v| v.as_string())
-            .unwrap_or_else(|| "hybrid".to_string());
-        let renderer_btn = div(document);
-        let renderer_label = match renderer_name.as_str() {
-            "cpu" => "CPU",
-            "pathfinder" => "Pathfinder",
-            "canvas2d" => "Canvas 2D",
-            _ => "Hybrid",
-        };
-        renderer_btn.set_text_content(Some(renderer_label));
-        set(
-            &renderer_btn,
-            &[
-                ("color", "#cdd6f4"),
-                ("font-size", "12px"),
-                ("font-weight", "600"),
-                ("cursor", "pointer"),
-                ("padding", "4px 10px"),
-                ("border-radius", "4px"),
-                ("border", "1px solid #585b70"),
-                ("margin-left", "8px"),
-                ("user-select", "none"),
-            ],
-        );
-        {
-            let cb = wasm_bindgen::closure::Closure::wrap(Box::new(move || {
-                if let Ok(f) =
-                    js_sys::Reflect::get(&js_sys::global(), &"__vello_toggle_renderer".into())
-                {
-                    if let Some(f) = f.dyn_ref::<js_sys::Function>() {
-                        let _ = f.call0(&wasm_bindgen::JsValue::NULL);
-                    }
-                }
-            }) as Box<dyn FnMut()>);
-            renderer_btn
-                .add_event_listener_with_callback("click", cb.as_ref().unchecked_ref())
-                .unwrap();
-            cb.forget();
-        }
-        top_bar.append_child(&renderer_btn).unwrap();
     }
+
+    // Renderer toggle (hybrid / cpu / pathfinder / canvas2d).
+    let renderer_name = js_sys::Reflect::get(&js_sys::global(), &"__vello_renderer".into())
+        .ok()
+        .and_then(|v| v.as_string())
+        .unwrap_or_else(|| "hybrid".to_string());
+    let renderer_btn = div(document);
+    let renderer_label = match renderer_name.as_str() {
+        "cpu" => "CPU",
+        "pathfinder" => "Pathfinder",
+        "canvas2d" => "Canvas 2D",
+        _ => "Hybrid",
+    };
+    renderer_btn.set_text_content(Some(renderer_label));
+    set(
+        &renderer_btn,
+        &[
+            ("color", "#cdd6f4"),
+            ("font-size", "12px"),
+            ("font-weight", "600"),
+            ("cursor", "pointer"),
+            ("padding", "4px 10px"),
+            ("border-radius", "4px"),
+            ("border", "1px solid #585b70"),
+            ("margin-left", "8px"),
+            ("user-select", "none"),
+        ],
+    );
+    {
+        let cb = wasm_bindgen::closure::Closure::wrap(Box::new(move || {
+            if let Ok(f) = js_sys::Reflect::get(&js_sys::global(), &"__vello_toggle_renderer".into())
+            {
+                if let Some(f) = f.dyn_ref::<js_sys::Function>() {
+                    let _ = f.call0(&wasm_bindgen::JsValue::NULL);
+                }
+            }
+        }) as Box<dyn FnMut()>);
+        renderer_btn
+            .add_event_listener_with_callback("click", cb.as_ref().unchecked_ref())
+            .unwrap();
+        cb.forget();
+    }
+    top_bar.append_child(&renderer_btn).unwrap();
 
     (top_bar, tab_interactive, tab_benchmark, top_timing_label)
 }

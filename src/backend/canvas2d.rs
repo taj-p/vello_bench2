@@ -1,3 +1,4 @@
+use vello_common::filter::PreparedFilter;
 use js_sys::{Function, Reflect};
 use vello_common::filter_effects::Filter;
 use vello_common::glyph::Glyph;
@@ -29,7 +30,12 @@ impl Pixmap {
 pub fn supports_scene(scene_id: SceneId) -> bool {
     matches!(
         scene_id,
-        SceneId::Rect | SceneId::Strokes | SceneId::Polyline | SceneId::Svg | SceneId::Clip
+        SceneId::Rect
+            | SceneId::Strokes
+            | SceneId::Polyline
+            | SceneId::Svg
+            | SceneId::Clip
+            | SceneId::FilterLayers
     )
 }
 
@@ -53,6 +59,14 @@ pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
             | (SceneId::Clip, ParamId::RectSize)
             | (SceneId::Clip, ParamId::ClipMode)
             | (SceneId::Clip, ParamId::ClipMethod)
+            | (SceneId::FilterLayers, ParamId::NumRects)
+            | (SceneId::FilterLayers, ParamId::RectSize)
+            | (SceneId::FilterLayers, ParamId::FilterKind)
+            | (SceneId::FilterLayers, ParamId::Speed)
+            | (SceneId::FilterLayers, ParamId::BlurStdDeviation)
+            | (SceneId::FilterLayers, ParamId::ShadowDx)
+            | (SceneId::FilterLayers, ParamId::ShadowDy)
+            | (SceneId::FilterLayers, ParamId::ShadowAlpha)
     )
 }
 
@@ -68,6 +82,8 @@ pub struct BackendImpl {
     current_paint: PaintState,
     fill_rule: CanvasWindingRule,
     clip_depth: usize,
+    layer_stack: Vec<LayerKind>,
+    current_transform: Affine,
     width: f64,
     height: f64,
 }
@@ -77,6 +93,12 @@ enum PaintState {
     Solid([f32; 4]),
     Gradient(Gradient),
     Unsupported,
+}
+
+#[derive(Clone, Copy)]
+enum LayerKind {
+    Clip,
+    Filter,
 }
 
 impl std::fmt::Debug for BackendImpl {
@@ -98,6 +120,8 @@ impl BackendImpl {
             current_paint: PaintState::Solid([1.0, 1.0, 1.0, 1.0]),
             fill_rule: CanvasWindingRule::Nonzero,
             clip_depth: 0,
+            layer_stack: Vec::new(),
+            current_transform: Affine::IDENTITY,
             width: w as f64,
             height: h as f64,
         };
@@ -110,12 +134,16 @@ impl BackendImpl {
             self.ctx.restore();
             self.clip_depth -= 1;
         }
+        while self.layer_stack.pop().is_some() {
+            self.ctx.restore();
+        }
         self.ctx.reset_transform().unwrap();
         self.ctx.clear_rect(0.0, 0.0, self.width, self.height);
         self.ctx.set_fill_style_str("#11111b");
         self.ctx.fill_rect(0.0, 0.0, self.width, self.height);
         self.ctx.set_filter("none");
         self.fill_rule = CanvasWindingRule::Nonzero;
+        self.current_transform = Affine::IDENTITY;
     }
 
     pub fn render_offscreen(&mut self) {}
@@ -151,6 +179,7 @@ impl BackendImpl {
     }
 
     pub fn set_transform(&mut self, transform: Affine) {
+        self.current_transform = transform;
         let c = transform.as_coeffs();
         self.ctx
             .set_transform(c[0], c[1], c[2], c[3], c[4], c[5])
@@ -158,6 +187,7 @@ impl BackendImpl {
     }
 
     pub fn reset_transform(&mut self) {
+        self.current_transform = Affine::IDENTITY;
         self.ctx.reset_transform().unwrap();
     }
 
@@ -216,10 +246,22 @@ impl BackendImpl {
     }
 
     pub fn push_clip_layer(&mut self, path: &BezPath) {
-        self.push_clip_path(path);
+        self.ctx.save();
+        self.ctx.begin_path();
+        trace_path(&self.ctx, path);
+        self.ctx.clip_with_canvas_winding_rule(self.fill_rule);
+        self.layer_stack.push(LayerKind::Clip);
     }
 
-    pub fn push_filter_layer(&mut self, _filter: Filter) {}
+    pub fn push_filter_layer(&mut self, filter: Filter) {
+        self.ctx.save();
+        self.ctx
+            .set_filter(&canvas_filter_string(&PreparedFilter::new(
+                &filter,
+                &self.current_transform,
+            )));
+        self.layer_stack.push(LayerKind::Filter);
+    }
 
     pub fn pop_clip_path(&mut self) {
         if self.clip_depth > 0 {
@@ -229,7 +271,9 @@ impl BackendImpl {
     }
 
     pub fn pop_layer(&mut self) {
-        self.pop_clip_path();
+        if self.layer_stack.pop().is_some() {
+            self.ctx.restore();
+        }
     }
 
     pub fn fill_glyphs(
@@ -343,4 +387,18 @@ fn css_rgba(components: &[f32; 4]) -> String {
     let b = (clamp(components[2]) * 255.0).round() as u8;
     let a = clamp(components[3]);
     format!("rgba({r}, {g}, {b}, {a})")
+}
+
+fn canvas_filter_string(filter: &PreparedFilter) -> String {
+    match filter {
+        PreparedFilter::GaussianBlur(blur) => format!("blur({:.3}px)", blur.std_deviation),
+        PreparedFilter::DropShadow(shadow) => format!(
+            "drop-shadow({:.3}px {:.3}px {:.3}px {})",
+            shadow.dx,
+            shadow.dy,
+            shadow.std_deviation,
+            css_rgba(&shadow.color.components)
+        ),
+        _ => "none".to_string(),
+    }
 }
