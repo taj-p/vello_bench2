@@ -8,7 +8,7 @@ mod strokes;
 mod svg;
 mod text;
 
-use crate::backend::Backend;
+use crate::backend::Renderer;
 pub use clip::ClipScene;
 pub use filter_layers::FilterLayersScene;
 pub use polyline::PolylineScene;
@@ -18,11 +18,85 @@ pub use svg::SvgScene;
 pub use text::TextScene;
 use vello_common::kurbo::Affine;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SceneId {
+    Rect,
+    Strokes,
+    Polyline,
+    Svg,
+    Clip,
+    Text,
+    FilterLayers,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ParamId {
+    NumRects,
+    PaintMode,
+    RectSize,
+    Rotated,
+    GradientShape,
+    DynamicGradient,
+    ImageFilter,
+    ImageOpaque,
+    UseDrawImage,
+    NumStrokes,
+    CurveType,
+    Segments,
+    StrokeWidth,
+    Cap,
+    NumVertices,
+    SvgAsset,
+    ClipMode,
+    ClipMethod,
+    NumRuns,
+    FontSize,
+    FilterKind,
+    Speed,
+    BlurStdDeviation,
+    ShadowDx,
+    ShadowDy,
+    ShadowAlpha,
+}
+
+impl ParamId {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NumRects => "num_rects",
+            Self::PaintMode => "paint_mode",
+            Self::RectSize => "rect_size",
+            Self::Rotated => "rotated",
+            Self::GradientShape => "gradient_shape",
+            Self::DynamicGradient => "dynamic_gradient",
+            Self::ImageFilter => "image_filter",
+            Self::ImageOpaque => "image_opaque",
+            Self::UseDrawImage => "use_draw_image",
+            Self::NumStrokes => "num_strokes",
+            Self::CurveType => "curve_type",
+            Self::Segments => "segments",
+            Self::StrokeWidth => "stroke_width",
+            Self::Cap => "cap",
+            Self::NumVertices => "num_vertices",
+            Self::SvgAsset => "svg_asset",
+            Self::ClipMode => "clip_mode",
+            Self::ClipMethod => "clip_method",
+            Self::NumRuns => "num_runs",
+            Self::FontSize => "font_size",
+            Self::FilterKind => "filter_kind",
+            Self::Speed => "speed",
+            Self::BlurStdDeviation => "blur_std_deviation",
+            Self::ShadowDx => "shadow_dx",
+            Self::ShadowDy => "shadow_dy",
+            Self::ShadowAlpha => "shadow_alpha",
+        }
+    }
+}
+
 /// A tweakable parameter for a benchmark scene.
 #[derive(Debug, Clone)]
 pub struct Param {
     /// Internal name used as key.
-    pub name: &'static str,
+    pub id: ParamId,
     /// Human-readable label for UI.
     pub label: &'static str,
     /// The kind of control: numeric range or dropdown select.
@@ -49,17 +123,26 @@ pub enum ParamKind {
 
 /// Trait for benchmark scenes with tweakable parameters.
 pub trait BenchScene {
+    /// Stable identifier used for backend capability checks.
+    fn scene_id(&self) -> SceneId;
     /// Display name of this scene.
     fn name(&self) -> &str;
     /// Return the list of tweakable parameters.
     fn params(&self) -> Vec<Param>;
     /// Update a parameter by name.
-    fn set_param(&mut self, name: &str, value: f64);
+    fn set_param(&mut self, param: ParamId, value: f64);
     /// Render one frame into the scene.
     ///
     /// `view` is a view transform (e.g. pan/zoom) applied by the interactive mode.
     /// Scenes should compose it with their own transforms.
-    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, time: f64, view: Affine);
+    fn render(
+        &mut self,
+        backend: &mut dyn Renderer,
+        width: u32,
+        height: u32,
+        time: f64,
+        view: Affine,
+    );
 }
 
 // ── Shared animation helpers ─────────────────────────────────────────────────
@@ -97,4 +180,16 @@ pub fn all_scenes() -> Vec<Box<dyn BenchScene>> {
         Box::new(TextScene::new()),
         Box::new(FilterLayersScene::new()),
     ]
+}
+
+pub fn scene_index(scene_id: SceneId) -> usize {
+    match scene_id {
+        SceneId::Rect => 0,
+        SceneId::Strokes => 1,
+        SceneId::Polyline => 2,
+        SceneId::Svg => 3,
+        SceneId::Clip => 4,
+        SceneId::Text => 5,
+        SceneId::FilterLayers => 6,
+    }
 }

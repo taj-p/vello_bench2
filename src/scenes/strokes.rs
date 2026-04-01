@@ -5,8 +5,8 @@
     reason = "truncation has no appreciable impact in this benchmark"
 )]
 
-use super::{BenchScene, Param, ParamKind, bounce, delta_time};
-use crate::backend::Backend;
+use super::{BenchScene, Param, ParamId, ParamKind, SceneId, bounce, delta_time};
+use crate::backend::Renderer;
 use crate::rng::Rng;
 use vello_common::kurbo::{Affine, BezPath, Cap, Stroke};
 use vello_common::peniko::Color;
@@ -166,6 +166,10 @@ fn extend_offsets(rng: &mut Rng, s: &mut AnimatedStroke, total_pts: usize) {
 }
 
 impl BenchScene for StrokesScene {
+    fn scene_id(&self) -> SceneId {
+        SceneId::Strokes
+    }
+
     fn name(&self) -> &str {
         "Strokes"
     }
@@ -173,7 +177,7 @@ impl BenchScene for StrokesScene {
     fn params(&self) -> Vec<Param> {
         vec![
             Param {
-                name: "num_strokes",
+                id: ParamId::NumStrokes,
                 label: "Strokes",
                 kind: ParamKind::Slider {
                     min: 1.0,
@@ -183,13 +187,13 @@ impl BenchScene for StrokesScene {
                 value: self.num_strokes as f64,
             },
             Param {
-                name: "curve_type",
+                id: ParamId::CurveType,
                 label: "Curve",
                 kind: ParamKind::Select(vec![("Line", 0.0), ("Quadratic", 1.0), ("Cubic", 2.0)]),
                 value: self.curve_type as f64,
             },
             Param {
-                name: "segments",
+                id: ParamId::Segments,
                 label: "Segments",
                 kind: ParamKind::Slider {
                     min: 1.0,
@@ -199,7 +203,7 @@ impl BenchScene for StrokesScene {
                 value: self.segments as f64,
             },
             Param {
-                name: "stroke_width",
+                id: ParamId::StrokeWidth,
                 label: "Stroke Width",
                 kind: ParamKind::Slider {
                     min: 0.5,
@@ -209,7 +213,7 @@ impl BenchScene for StrokesScene {
                 value: self.stroke_width,
             },
             Param {
-                name: "cap",
+                id: ParamId::Cap,
                 label: "Cap",
                 kind: ParamKind::Select(vec![("Butt", 0.0), ("Square", 1.0), ("Round", 2.0)]),
                 value: self.cap as f64,
@@ -217,18 +221,25 @@ impl BenchScene for StrokesScene {
         ]
     }
 
-    fn set_param(&mut self, name: &str, value: f64) {
-        match name {
-            "num_strokes" => self.num_strokes = value as usize,
-            "curve_type" => self.curve_type = value as u32,
-            "segments" => self.segments = (value as usize).max(1),
-            "stroke_width" => self.stroke_width = value,
-            "cap" => self.cap = value as u32,
+    fn set_param(&mut self, param: ParamId, value: f64) {
+        match param {
+            ParamId::NumStrokes => self.num_strokes = value as usize,
+            ParamId::CurveType => self.curve_type = value as u32,
+            ParamId::Segments => self.segments = (value as usize).max(1),
+            ParamId::StrokeWidth => self.stroke_width = value,
+            ParamId::Cap => self.cap = value as u32,
             _ => {}
         }
     }
 
-    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, time: f64, view: Affine) {
+    fn render(
+        &mut self,
+        backend: &mut dyn Renderer,
+        width: u32,
+        height: u32,
+        time: f64,
+        view: Affine,
+    ) {
         let w = width as f64;
         let h = height as f64;
 
@@ -283,7 +294,7 @@ impl BenchScene for StrokesScene {
                     }
                 }
             }
-            backend.set_paint(s.color);
+            backend.set_paint(s.color.into());
             backend.stroke_path(&path);
             path.truncate(0);
         }

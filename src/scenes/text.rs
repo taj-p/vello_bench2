@@ -7,8 +7,8 @@
 
 use std::sync::Arc;
 
-use super::{BenchScene, Param, ParamKind, bounce, delta_time};
-use crate::backend::Backend;
+use super::{BenchScene, Param, ParamId, ParamKind, SceneId, bounce, delta_time};
+use crate::backend::Renderer;
 use crate::rng::Rng;
 use skrifa::MetadataProvider;
 use skrifa::raw::FileRef;
@@ -42,6 +42,7 @@ pub struct TextScene {
     speed: f64,
     font_size: f32,
     runs: Vec<AnimatedText>,
+    glyph_scratch: Vec<Glyph>,
     rng: Rng,
     last_time: f64,
     font_data: FontData,
@@ -64,6 +65,7 @@ impl TextScene {
             speed: 5.0,
             font_size: 24.0,
             runs: Vec::new(),
+            glyph_scratch: Vec::new(),
             rng: Rng::new(0xBAAD_F00D),
             last_time: 0.0,
             font_data: FontData::new(Blob::new(Arc::new(INCONSOLATA)), 0),
@@ -125,6 +127,10 @@ fn random_text_run(
 }
 
 impl BenchScene for TextScene {
+    fn scene_id(&self) -> SceneId {
+        SceneId::Text
+    }
+
     fn name(&self) -> &str {
         "Text"
     }
@@ -132,7 +138,7 @@ impl BenchScene for TextScene {
     fn params(&self) -> Vec<Param> {
         vec![
             Param {
-                name: "num_runs",
+                id: ParamId::NumRuns,
                 label: "Text Runs",
                 kind: ParamKind::Slider {
                     min: 1.0,
@@ -142,7 +148,7 @@ impl BenchScene for TextScene {
                 value: self.num_runs as f64,
             },
             Param {
-                name: "font_size",
+                id: ParamId::FontSize,
                 label: "Font Size",
                 kind: ParamKind::Slider {
                     min: 8.0,
@@ -154,10 +160,10 @@ impl BenchScene for TextScene {
         ]
     }
 
-    fn set_param(&mut self, name: &str, value: f64) {
-        match name {
-            "num_runs" => self.num_runs = value as usize,
-            "font_size" => {
+    fn set_param(&mut self, param: ParamId, value: f64) {
+        match param {
+            ParamId::NumRuns => self.num_runs = value as usize,
+            ParamId::FontSize => {
                 let new_size = value as f32;
                 if (new_size - self.font_size).abs() > 0.01 {
                     self.font_size = new_size;
@@ -169,7 +175,14 @@ impl BenchScene for TextScene {
         }
     }
 
-    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, time: f64, view: Affine) {
+    fn render(
+        &mut self,
+        backend: &mut dyn Renderer,
+        width: u32,
+        height: u32,
+        time: f64,
+        view: Affine,
+    ) {
         let w = width as f64;
         let h = height as f64;
 
@@ -180,6 +193,7 @@ impl BenchScene for TextScene {
         let dt = delta_time(&mut self.last_time, time, self.speed);
 
         backend.set_transform(view);
+        let glyph_scratch = &mut self.glyph_scratch;
 
         for run in &mut self.runs {
             run.x += run.vx * dt;
@@ -187,19 +201,16 @@ impl BenchScene for TextScene {
             bounce(&mut run.x, &mut run.vx, (w - run.run_width as f64).max(0.0));
             bounce(&mut run.y, &mut run.vy, h);
 
-            backend.set_paint(run.color);
+            backend.set_paint(run.color.into());
 
-            let glyphs = run.glyphs.iter().map(|&(id, x)| Glyph {
+            glyph_scratch.clear();
+            glyph_scratch.extend(run.glyphs.iter().map(|&(id, x)| Glyph {
                 id,
                 x: x + run.x as f32,
                 y: run.y as f32,
-            });
+            }));
 
-            backend
-                .glyph_run(&self.font_data)
-                .font_size(self.font_size)
-                .hint(true)
-                .fill_glyphs(glyphs);
+            backend.fill_glyphs(&self.font_data, self.font_size, true, glyph_scratch);
         }
     }
 }

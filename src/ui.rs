@@ -8,8 +8,9 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+use crate::backend::BackendCapabilities;
 use crate::harness::{BenchDef, BenchResult, BenchScale};
-use crate::scenes::{BenchScene, Param, ParamKind};
+use crate::scenes::{BenchScene, Param, ParamId, ParamKind};
 use crate::storage::{BenchReport, UiState};
 use wasm_bindgen::prelude::*;
 use web_sys::{
@@ -121,6 +122,16 @@ fn sanitized_stepper_value(
     snapped
 }
 
+fn visible_params_for_scene(
+    scene: &dyn BenchScene,
+    capabilities: BackendCapabilities,
+) -> Vec<Param> {
+    scene.params()
+        .into_iter()
+        .filter(|param| capabilities.supports_param(scene.scene_id(), param.id))
+        .collect()
+}
+
 // ── Mode ─────────────────────────────────────────────────────────────────────
 
 /// App mode.
@@ -152,6 +163,7 @@ enum ParamCtrl {
 
 /// Per-benchmark-row DOM state.
 struct BenchRowState {
+    supported: Cell<bool>,
     checkbox: HtmlInputElement,
     row: HtmlElement,
     status_dot: HtmlElement,
@@ -191,7 +203,7 @@ pub struct Ui {
     viewport_label: HtmlElement,
     /// Scene selector.
     pub scene_select: HtmlSelectElement,
-    controls: Vec<(ParamCtrl, HtmlElement, &'static str)>,
+    controls: Vec<(ParamCtrl, HtmlElement, ParamId)>,
     /// Reset view button.
     pub reset_view_btn: HtmlElement,
 
@@ -249,6 +261,7 @@ impl Ui {
         document: &Document,
         scenes: &[Box<dyn BenchScene>],
         bench_defs: &[BenchDef],
+        capabilities: BackendCapabilities,
         current_scene: usize,
         vp_w: u32,
         vp_h: u32,
@@ -272,7 +285,15 @@ impl Ui {
         let (top_bar, tab_interactive, tab_benchmark, top_timing_label) = build_top_bar(document);
         body.append_child(&top_bar).unwrap();
 
-        let iv = build_interactive_view(document, scenes, current_scene, vp_w, vp_h, &dirty);
+        let iv = build_interactive_view(
+            document,
+            scenes,
+            capabilities,
+            current_scene,
+            vp_w,
+            vp_h,
+            &dirty,
+        );
         body.append_child(&iv.view).unwrap();
 
         let benchmark_view = div(document);
@@ -305,7 +326,14 @@ impl Ui {
         let cfg = build_bench_config(document, vp_w, vp_h);
         bench_layout.append_child(&cfg.wrapper).unwrap();
 
-        let rows = build_bench_rows(document, bench_defs, &cfg.screenshot_img, &dirty);
+        let rows = build_bench_rows(
+            document,
+            bench_defs,
+            scenes,
+            capabilities,
+            &cfg.screenshot_img,
+            &dirty,
+        );
         bench_layout.append_child(&rows.container).unwrap();
 
         benchmark_view.append_child(&bench_layout).unwrap();
@@ -498,10 +526,10 @@ impl Ui {
     }
 
     /// Read interactive param values.
-    pub fn read_params(&self) -> Vec<(&'static str, f64)> {
+    pub fn read_params(&self) -> Vec<(ParamId, f64)> {
         self.controls
             .iter()
-            .map(|(ctrl, val_span, name)| {
+            .map(|(ctrl, val_span, param_id)| {
                 let v: f64 = match ctrl {
                     ParamCtrl::Stepper {
                         input,
@@ -512,7 +540,7 @@ impl Ui {
                     } => sanitized_stepper_value(input, val_span, *min, *max, *step),
                     ParamCtrl::Select { select, .. } => select.value().parse().unwrap_or(0.0),
                 };
-                (*name, v)
+                (*param_id, v)
             })
             .collect()
     }
@@ -538,7 +566,7 @@ impl Ui {
 
     /// Selected interactive scene index.
     pub fn selected_scene(&self) -> usize {
-        self.scene_select.selected_index() as usize
+        self.scene_select.value().parse().unwrap_or(0)
     }
 
     /// Return references to all bench row checkboxes (for event wiring).
@@ -591,7 +619,7 @@ impl Ui {
         self.bench_rows
             .iter()
             .enumerate()
-            .filter(|(_, r)| r.checkbox.checked())
+            .filter(|(_, r)| r.supported.get() && r.checkbox.checked())
             .map(|(i, _)| i)
             .collect()
     }
@@ -603,6 +631,9 @@ impl Ui {
             .set_property("display", "none")
             .unwrap();
         for (i, r) in self.bench_rows.iter().enumerate() {
+            if !r.supported.get() {
+                continue;
+            }
             r.result_line
                 .style()
                 .set_property("display", "none")
@@ -695,6 +726,9 @@ impl Ui {
     /// All benchmarks done — re-enable UI and show deltas if comparison loaded.
     pub fn bench_all_done(&self) {
         for r in &self.bench_rows {
+            if !r.supported.get() {
+                continue;
+            }
             r.checkbox.set_disabled(false);
             r.row.style().set_property("opacity", "1").unwrap();
         }
@@ -891,11 +925,11 @@ impl Ui {
             AppMode::Interactive => "interactive",
             AppMode::Benchmark => "benchmark",
         };
-        let scene = self.scene_select.selected_index() as usize;
+        let scene = self.selected_scene();
         let params: Vec<(String, f64)> = self
             .controls
             .iter()
-            .map(|(ctrl, val_span, name)| {
+            .map(|(ctrl, val_span, param_id)| {
                 let v: f64 = match ctrl {
                     ParamCtrl::Stepper {
                         input,
@@ -906,14 +940,14 @@ impl Ui {
                     } => sanitized_stepper_value(input, val_span, *min, *max, *step),
                     ParamCtrl::Select { select, .. } => select.value().parse().unwrap_or(0.0),
                 };
-                (name.to_string(), v)
+                (param_id.as_str().to_string(), v)
             })
             .collect();
         let benches: Vec<usize> = self
             .bench_rows
             .iter()
             .enumerate()
-            .filter(|(_, r)| r.checkbox.checked())
+            .filter(|(_, r)| r.supported.get() && r.checkbox.checked())
             .map(|(i, _)| i)
             .collect();
         crate::storage::save_ui_state(&UiState {
@@ -932,7 +966,9 @@ impl Ui {
         }
         let set: std::collections::HashSet<usize> = saved.benches.iter().copied().collect();
         for (i, r) in self.bench_rows.iter().enumerate() {
-            r.checkbox.set_checked(set.contains(&i));
+            if r.supported.get() {
+                r.checkbox.set_checked(set.contains(&i));
+            }
         }
     }
 
@@ -946,8 +982,8 @@ impl Ui {
 
     /// Apply saved interactive param values.
     pub(crate) fn apply_saved_params(&self, saved: &UiState) {
-        for (ctrl, val_span, name) in &self.controls {
-            if let Some((_, v)) = saved.params.iter().find(|(k, _)| k == name) {
+        for (ctrl, val_span, param_id) in &self.controls {
+            if let Some((_, v)) = saved.params.iter().find(|(k, _)| k == param_id.as_str()) {
                 match ctrl {
                     ParamCtrl::Stepper {
                         input,
@@ -1054,7 +1090,7 @@ struct InteractiveViewParts {
     total_label: HtmlElement,
     viewport_label: HtmlElement,
     scene_select: HtmlSelectElement,
-    controls: Vec<(ParamCtrl, HtmlElement, &'static str)>,
+    controls: Vec<(ParamCtrl, HtmlElement, ParamId)>,
     reset_view_btn: HtmlElement,
 }
 
@@ -1236,6 +1272,7 @@ fn build_top_bar(document: &Document) -> (HtmlElement, HtmlElement, HtmlElement,
 fn build_interactive_view(
     document: &Document,
     scenes: &[Box<dyn BenchScene>],
+    capabilities: BackendCapabilities,
     current_scene: usize,
     vp_w: u32,
     vp_h: u32,
@@ -1387,9 +1424,13 @@ fn build_interactive_view(
         let opt = document.create_element("option").unwrap();
         opt.set_text_content(Some(s.name()));
         opt.set_attribute("value", &i.to_string()).unwrap();
+        if !capabilities.supports_scene(s.scene_id()) {
+            opt.set_attribute("hidden", "true").unwrap();
+            opt.set_attribute("disabled", "true").unwrap();
+        }
         scene_select.append_child(&opt).unwrap();
     }
-    scene_select.set_selected_index(current_scene as i32);
+    scene_select.set_value(&current_scene.to_string());
     sidebar.append_child(&scene_select).unwrap();
 
     let sep = div(document);
@@ -1405,7 +1446,7 @@ fn build_interactive_view(
     let controls = build_controls(
         document,
         &sidebar,
-        &scenes[current_scene].params(),
+        &visible_params_for_scene(scenes[current_scene].as_ref(), capabilities),
         None,
         Some(dirty),
     );
@@ -1688,6 +1729,8 @@ fn build_bench_config(document: &Document, vp_w: u32, vp_h: u32) -> BenchConfigP
 fn build_bench_rows(
     document: &Document,
     bench_defs: &[BenchDef],
+    scenes: &[Box<dyn BenchScene>],
+    capabilities: BackendCapabilities,
     screenshot_img: &HtmlImageElement,
     dirty: &Rc<Cell<bool>>,
 ) -> BenchRowsParts {
@@ -1822,6 +1865,7 @@ fn build_bench_rows(
             bench_row_states[i] = Some(build_single_bench_row(
                 document,
                 def,
+                bench_def_supported(def, scenes, capabilities),
                 &screenshot_img_rc,
                 &cat_block,
             ));
@@ -1892,6 +1936,7 @@ fn build_bench_rows(
 fn build_single_bench_row(
     document: &Document,
     def: &BenchDef,
+    supported: bool,
     screenshot_img_rc: &Rc<HtmlImageElement>,
     cat_block: &HtmlElement,
 ) -> BenchRowState {
@@ -1909,6 +1954,9 @@ fn build_single_bench_row(
             ("transition", "border-color 0.3s, background 0.3s"),
         ],
     );
+    if !supported {
+        row.style().set_property("display", "none").unwrap();
+    }
 
     let cb: HtmlInputElement = document
         .create_element("input")
@@ -1916,7 +1964,8 @@ fn build_single_bench_row(
         .dyn_into()
         .unwrap();
     cb.set_type("checkbox");
-    cb.set_checked(true);
+    cb.set_checked(supported);
+    cb.set_disabled(!supported);
     set_prop(&cb, "accent-color", "#89b4fa");
     set_prop(&cb, "width", "14px");
     set_prop(&cb, "height", "14px");
@@ -2089,6 +2138,7 @@ fn build_single_bench_row(
     cat_block.append_child(&row).unwrap();
 
     BenchRowState {
+        supported: Cell::new(supported),
         checkbox: cb,
         row,
         status_dot: dot,
@@ -2100,6 +2150,25 @@ fn build_single_bench_row(
         name: def.name,
         scale: def.scale,
     }
+}
+
+fn bench_def_supported(
+    def: &BenchDef,
+    scenes: &[Box<dyn BenchScene>],
+    capabilities: BackendCapabilities,
+) -> bool {
+    let Some(scene) = scenes.get(crate::scenes::scene_index(def.scene_id)) else {
+        return false;
+    };
+    if !capabilities.supports_scene(scene.scene_id()) {
+        return false;
+    }
+    def.params
+        .iter()
+        .all(|(param_id, _)| capabilities.supports_param(scene.scene_id(), *param_id))
+        && def
+            .scale
+            .is_none_or(|scale| capabilities.supports_param(scene.scene_id(), scale.param))
 }
 
 fn build_lightbox(
@@ -2372,7 +2441,7 @@ fn build_controls(
     params: &[Param],
     insert_before: Option<&HtmlElement>,
     dirty: Option<&Rc<Cell<bool>>>,
-) -> Vec<(ParamCtrl, HtmlElement, &'static str)> {
+) -> Vec<(ParamCtrl, HtmlElement, ParamId)> {
     let mut out = Vec::new();
 
     for p in params {
@@ -2570,7 +2639,7 @@ fn build_controls(
         } else {
             container.append_child(&row).unwrap();
         }
-        out.push((ctrl, val_span, p.name));
+        out.push((ctrl, val_span, p.id));
     }
 
     out

@@ -5,8 +5,8 @@
     reason = "truncation has no appreciable impact in this benchmark"
 )]
 
-use super::{BenchScene, Param, ParamKind, bounce, delta_time};
-use crate::backend::Backend;
+use super::{BenchScene, Param, ParamId, ParamKind, SceneId, bounce, delta_time};
+use crate::backend::Renderer;
 use crate::rng::Rng;
 use vello_common::kurbo::{Affine, BezPath};
 use vello_common::peniko::{Color, Fill};
@@ -59,13 +59,17 @@ impl PolylineScene {
 }
 
 impl BenchScene for PolylineScene {
+    fn scene_id(&self) -> SceneId {
+        SceneId::Polyline
+    }
+
     fn name(&self) -> &str {
         "Polyline"
     }
 
     fn params(&self) -> Vec<Param> {
         vec![Param {
-            name: "num_vertices",
+            id: ParamId::NumVertices,
             label: "Vertices",
             kind: ParamKind::Slider {
                 min: 20.0,
@@ -76,14 +80,21 @@ impl BenchScene for PolylineScene {
         }]
     }
 
-    fn set_param(&mut self, name: &str, value: f64) {
-        match name {
-            "num_vertices" => self.num_vertices = (value as usize).max(3),
+    fn set_param(&mut self, param: ParamId, value: f64) {
+        match param {
+            ParamId::NumVertices => self.num_vertices = (value as usize).max(3),
             _ => {}
         }
     }
 
-    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, time: f64, view: Affine) {
+    fn render(
+        &mut self,
+        backend: &mut dyn Renderer,
+        width: u32,
+        height: u32,
+        time: f64,
+        view: Affine,
+    ) {
         let w = width as f64;
         let h = height as f64;
 
@@ -106,7 +117,7 @@ impl BenchScene for PolylineScene {
         path.close_path();
 
         backend.set_transform(view);
-        backend.set_paint(Color::from_rgba8(66, 135, 245, 180));
+        backend.set_paint(Color::from_rgba8(66, 135, 245, 180).into());
         backend.set_fill_rule(Fill::EvenOdd);
         backend.fill_path(&path);
         backend.reset_transform();

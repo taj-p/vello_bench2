@@ -5,8 +5,8 @@
     reason = "truncation has no appreciable impact in this benchmark"
 )]
 
-use super::{BenchScene, Param, ParamKind, bounce, delta_time};
-use crate::backend::{Backend, Pixmap};
+use super::{BenchScene, Param, ParamId, ParamKind, SceneId, bounce, delta_time};
+use crate::backend::{Pixmap, Renderer};
 use crate::rng::Rng;
 use smallvec::smallvec;
 use vello_common::kurbo::{Affine, Point, Rect};
@@ -205,7 +205,7 @@ impl RectScene {
     /// Each image gets a concentric-ring pattern with a unique frequency and
     /// color palette — cheap to compute but produces visible moiré when scaled,
     /// making the difference between nearest-neighbor and bilinear obvious.
-    fn ensure_images(&mut self, backend: &mut Backend) {
+    fn ensure_images(&mut self, backend: &mut dyn Renderer) {
         if !self.image_sources.is_empty() && self.images_were_opaque == self.image_opaque {
             return;
         }
@@ -291,6 +291,10 @@ fn random_rect(rng: &mut Rng, w: f64, h: f64) -> AnimatedRect {
 }
 
 impl BenchScene for RectScene {
+    fn scene_id(&self) -> SceneId {
+        SceneId::Rect
+    }
+
     fn name(&self) -> &str {
         "Rectangles"
     }
@@ -298,7 +302,7 @@ impl BenchScene for RectScene {
     fn params(&self) -> Vec<Param> {
         vec![
             Param {
-                name: "num_rects",
+                id: ParamId::NumRects,
                 label: "Rectangles",
                 kind: ParamKind::Slider {
                     min: 1.0,
@@ -308,13 +312,13 @@ impl BenchScene for RectScene {
                 value: self.num_rects as f64,
             },
             Param {
-                name: "paint_mode",
+                id: ParamId::PaintMode,
                 label: "Paint",
                 kind: ParamKind::Select(vec![("Solid", 0.0), ("Gradient", 1.0), ("Image", 2.0)]),
                 value: self.paint_mode as f64,
             },
             Param {
-                name: "rect_size",
+                id: ParamId::RectSize,
                 label: "Rect Size",
                 kind: ParamKind::Slider {
                     min: 5.0,
@@ -324,37 +328,37 @@ impl BenchScene for RectScene {
                 value: self.rect_size,
             },
             Param {
-                name: "rotated",
+                id: ParamId::Rotated,
                 label: "Rotated",
                 kind: ParamKind::Select(vec![("Off", 0.0), ("On", 1.0)]),
                 value: if self.rotated { 1.0 } else { 0.0 },
             },
             Param {
-                name: "gradient_shape",
+                id: ParamId::GradientShape,
                 label: "Gradient Shape",
                 kind: ParamKind::Select(vec![("Linear", 0.0), ("Radial", 1.0), ("Sweep", 2.0)]),
                 value: self.gradient_shape as f64,
             },
             Param {
-                name: "dynamic_gradient",
+                id: ParamId::DynamicGradient,
                 label: "Dynamic Gradient",
                 kind: ParamKind::Select(vec![("Off", 0.0), ("On", 1.0)]),
                 value: if self.dynamic_gradient { 1.0 } else { 0.0 },
             },
             Param {
-                name: "image_filter",
+                id: ParamId::ImageFilter,
                 label: "Image Filter",
                 kind: ParamKind::Select(vec![("Nearest", 0.0), ("Bilinear", 1.0)]),
                 value: self.image_filter as f64,
             },
             Param {
-                name: "image_opaque",
+                id: ParamId::ImageOpaque,
                 label: "Image Opaque",
                 kind: ParamKind::Select(vec![("No", 0.0), ("Yes", 1.0)]),
                 value: if self.image_opaque { 1.0 } else { 0.0 },
             },
             Param {
-                name: "use_draw_image",
+                id: ParamId::UseDrawImage,
                 label: "Use draw_image",
                 kind: ParamKind::Select(vec![("No", 0.0), ("Yes", 1.0)]),
                 value: if self.use_draw_image { 1.0 } else { 0.0 },
@@ -362,22 +366,29 @@ impl BenchScene for RectScene {
         ]
     }
 
-    fn set_param(&mut self, name: &str, value: f64) {
-        match name {
-            "num_rects" => self.num_rects = value as usize,
-            "paint_mode" => self.paint_mode = value as u32,
-            "rect_size" => self.rect_size = value,
-            "rotated" => self.rotated = value >= 0.5,
-            "gradient_shape" => self.gradient_shape = value as u32,
-            "dynamic_gradient" => self.dynamic_gradient = value >= 0.5,
-            "image_filter" => self.image_filter = value as u32,
-            "image_opaque" => self.image_opaque = value >= 0.5,
-            "use_draw_image" => self.use_draw_image = value >= 0.5,
+    fn set_param(&mut self, param: ParamId, value: f64) {
+        match param {
+            ParamId::NumRects => self.num_rects = value as usize,
+            ParamId::PaintMode => self.paint_mode = value as u32,
+            ParamId::RectSize => self.rect_size = value,
+            ParamId::Rotated => self.rotated = value >= 0.5,
+            ParamId::GradientShape => self.gradient_shape = value as u32,
+            ParamId::DynamicGradient => self.dynamic_gradient = value >= 0.5,
+            ParamId::ImageFilter => self.image_filter = value as u32,
+            ParamId::ImageOpaque => self.image_opaque = value >= 0.5,
+            ParamId::UseDrawImage => self.use_draw_image = value >= 0.5,
             _ => {}
         }
     }
 
-    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, time: f64, view: Affine) {
+    fn render(
+        &mut self,
+        backend: &mut dyn Renderer,
+        width: u32,
+        height: u32,
+        time: f64,
+        view: Affine,
+    ) {
         let w = width as f64;
         let h = height as f64;
 
@@ -426,7 +437,7 @@ impl BenchScene for RectScene {
 
             match self.paint_mode {
                 0 => {
-                    backend.set_paint(r.color);
+                    backend.set_paint(r.color.into());
                 }
                 1 => {
                     let (gx, gy) = if self.rotated { (0.0, 0.0) } else { (r.x, r.y) };
@@ -514,7 +525,7 @@ impl BenchScene for RectScene {
                         extend: Extend::Pad,
                         ..Default::default()
                     };
-                    backend.set_paint(gradient);
+                    backend.set_paint(gradient.into());
                 }
                 _ if self.use_draw_image => {
                     // draw_image expects the rect in image-native coordinates;
@@ -563,7 +574,7 @@ impl BenchScene for RectScene {
                             Affine::translate((r.x, r.y)) * Affine::scale(scale),
                         );
                     }
-                    backend.set_paint(image);
+                    backend.set_paint(image.into());
                 }
             }
 

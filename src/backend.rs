@@ -5,10 +5,13 @@
 //! operations (render, sync, image upload) live on `Backend` directly.
 
 use vello_common::filter_effects::Filter;
+use vello_common::glyph::Glyph;
 use vello_common::kurbo::{Affine, BezPath, Rect, Stroke};
 use vello_common::paint::{ImageSource, PaintType};
 use vello_common::peniko::{Fill, FontData};
 use web_sys::HtmlCanvasElement;
+
+use crate::scenes::{ParamId, SceneId};
 
 // ── CPU backend ──────────────────────────────────────────────────────────────
 
@@ -202,6 +205,52 @@ mod inner {
 pub use inner::Pixmap;
 use inner::{BackendInner, DrawContext};
 
+// ── Scene-facing abstraction ────────────────────────────────────────────────
+
+pub trait Renderer {
+    fn set_paint(&mut self, paint: PaintType);
+    fn set_transform(&mut self, transform: Affine);
+    fn reset_transform(&mut self);
+    fn set_stroke(&mut self, stroke: Stroke);
+    fn set_paint_transform(&mut self, transform: Affine);
+    fn reset_paint_transform(&mut self);
+    fn set_fill_rule(&mut self, fill: Fill);
+    fn fill_rect(&mut self, rect: &Rect);
+    fn fill_path(&mut self, path: &BezPath);
+    fn stroke_path(&mut self, path: &BezPath);
+    fn push_clip_path(&mut self, path: &BezPath);
+    fn push_clip_layer(&mut self, path: &BezPath);
+    fn push_filter_layer(&mut self, filter: Filter);
+    fn pop_clip_path(&mut self);
+    fn pop_layer(&mut self);
+    fn fill_glyphs(&mut self, font: &FontData, font_size: f32, hint: bool, glyphs: &[Glyph]);
+    fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool);
+    fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource;
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BackendCapabilities;
+
+impl BackendCapabilities {
+    pub fn supports_scene(self, _scene_id: SceneId) -> bool {
+        true
+    }
+
+    pub fn supports_param(self, _scene_id: SceneId, _param: ParamId) -> bool {
+        #[cfg(feature = "cpu")]
+        {
+            if _scene_id == SceneId::Rect && _param == ParamId::UseDrawImage {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+pub fn current_backend_capabilities() -> BackendCapabilities {
+    BackendCapabilities
+}
+
 // ── Unified Backend ──────────────────────────────────────────────────────────
 
 pub struct Backend {
@@ -257,85 +306,11 @@ impl Backend {
         self.ctx = DrawContext::new(w as u16, h as u16);
     }
 
-    /// Upload an image and return its ID.
-    pub fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
+    fn upload_image_impl(&mut self, pixmap: Pixmap) -> ImageSource {
         self.inner.upload_image(&mut self.ctx, pixmap)
     }
 
-    // ── Drawing methods (forwarded to inner DrawContext) ─────────────────
-
-    pub fn set_paint(&mut self, paint: impl Into<PaintType>) {
-        self.ctx.set_paint(paint);
-    }
-
-    pub fn set_transform(&mut self, transform: Affine) {
-        self.ctx.set_transform(transform);
-    }
-
-    pub fn reset_transform(&mut self) {
-        self.ctx.reset_transform();
-    }
-
-    pub fn set_stroke(&mut self, stroke: Stroke) {
-        self.ctx.set_stroke(stroke);
-    }
-
-    pub fn set_paint_transform(&mut self, transform: Affine) {
-        self.ctx.set_paint_transform(transform);
-    }
-
-    pub fn reset_paint_transform(&mut self) {
-        self.ctx.reset_paint_transform();
-    }
-
-    pub fn set_fill_rule(&mut self, fill: Fill) {
-        self.ctx.set_fill_rule(fill);
-    }
-
-    pub fn fill_rect(&mut self, rect: &Rect) {
-        self.ctx.fill_rect(rect);
-    }
-
-    pub fn fill_path(&mut self, path: &BezPath) {
-        self.ctx.fill_path(path);
-    }
-
-    pub fn stroke_path(&mut self, path: &BezPath) {
-        self.ctx.stroke_path(path);
-    }
-
-    pub fn push_clip_path(&mut self, path: &BezPath) {
-        self.ctx.push_clip_path(path);
-    }
-
-    pub fn push_clip_layer(&mut self, path: &BezPath) {
-        self.ctx.push_clip_layer(path);
-    }
-
-    pub fn push_filter_layer(&mut self, filter: Filter) {
-        self.ctx.push_filter_layer(filter);
-    }
-
-    pub fn pop_clip_path(&mut self) {
-        self.ctx.pop_clip_path();
-    }
-
-    pub fn pop_layer(&mut self) {
-        self.ctx.pop_layer();
-    }
-
-    pub fn glyph_run(
-        &mut self,
-        font: &FontData,
-    ) -> vello_common::glyph::GlyphRunBuilder<'_, DrawContext> {
-        self.ctx.glyph_run(font)
-    }
-
-    /// Draw an image into a rect.
-    ///
-    /// On the hybrid backend this uses the GPU fast path (`Scene::draw_image`).
-    /// On the CPU backend this falls back to image paint with Pad extend.
-    pub fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool) {
+    fn draw_image_impl(&mut self, _image: ImageSource, _rect: &Rect, _bilinear: bool) {
         // TODO: Re-add this once bilinear image painting has been merged to main.
         // #[cfg(not(feature = "cpu"))]
         // {
@@ -365,5 +340,83 @@ impl Backend {
         //     self.ctx.set_paint_transform(old_paint_transform);
         //     self.ctx.set_paint(old_paint);
         // }
+    }
+}
+
+impl Renderer for Backend {
+    fn set_paint(&mut self, paint: PaintType) {
+        self.ctx.set_paint(paint);
+    }
+
+    fn set_transform(&mut self, transform: Affine) {
+        self.ctx.set_transform(transform);
+    }
+
+    fn reset_transform(&mut self) {
+        self.ctx.reset_transform();
+    }
+
+    fn set_stroke(&mut self, stroke: Stroke) {
+        self.ctx.set_stroke(stroke);
+    }
+
+    fn set_paint_transform(&mut self, transform: Affine) {
+        self.ctx.set_paint_transform(transform);
+    }
+
+    fn reset_paint_transform(&mut self) {
+        self.ctx.reset_paint_transform();
+    }
+
+    fn set_fill_rule(&mut self, fill: Fill) {
+        self.ctx.set_fill_rule(fill);
+    }
+
+    fn fill_rect(&mut self, rect: &Rect) {
+        self.ctx.fill_rect(rect);
+    }
+
+    fn fill_path(&mut self, path: &BezPath) {
+        self.ctx.fill_path(path);
+    }
+
+    fn stroke_path(&mut self, path: &BezPath) {
+        self.ctx.stroke_path(path);
+    }
+
+    fn push_clip_path(&mut self, path: &BezPath) {
+        self.ctx.push_clip_path(path);
+    }
+
+    fn push_clip_layer(&mut self, path: &BezPath) {
+        self.ctx.push_clip_layer(path);
+    }
+
+    fn push_filter_layer(&mut self, filter: Filter) {
+        self.ctx.push_filter_layer(filter);
+    }
+
+    fn pop_clip_path(&mut self) {
+        self.ctx.pop_clip_path();
+    }
+
+    fn pop_layer(&mut self) {
+        self.ctx.pop_layer();
+    }
+
+    fn fill_glyphs(&mut self, font: &FontData, font_size: f32, hint: bool, glyphs: &[Glyph]) {
+        self.ctx
+            .glyph_run(font)
+            .font_size(font_size)
+            .hint(hint)
+            .fill_glyphs(glyphs.iter().copied());
+    }
+
+    fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool) {
+        self.draw_image_impl(image, rect, bilinear);
+    }
+
+    fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
+        self.upload_image_impl(pixmap)
     }
 }

@@ -7,8 +7,8 @@
 
 use std::f64::consts::{FRAC_PI_2, PI};
 
-use super::{BenchScene, Param, ParamKind, bounce, delta_time};
-use crate::backend::Backend;
+use super::{BenchScene, Param, ParamId, ParamKind, SceneId, bounce, delta_time};
+use crate::backend::Renderer;
 use crate::rng::Rng;
 use vello_common::kurbo::{Affine, BezPath, Point, Rect, Vec2};
 use vello_common::peniko::Color;
@@ -93,6 +93,10 @@ fn star_path(center: Point, inner: f64, outer: f64) -> BezPath {
 }
 
 impl BenchScene for ClipScene {
+    fn scene_id(&self) -> SceneId {
+        SceneId::Clip
+    }
+
     fn name(&self) -> &str {
         "Clip Paths"
     }
@@ -100,7 +104,7 @@ impl BenchScene for ClipScene {
     fn params(&self) -> Vec<Param> {
         vec![
             Param {
-                name: "num_rects",
+                id: ParamId::NumRects,
                 label: "Rectangles",
                 kind: ParamKind::Slider {
                     min: 1.0,
@@ -110,7 +114,7 @@ impl BenchScene for ClipScene {
                 value: self.num_rects as f64,
             },
             Param {
-                name: "rect_size",
+                id: ParamId::RectSize,
                 label: "Rect Size",
                 kind: ParamKind::Slider {
                     min: 5.0,
@@ -120,13 +124,13 @@ impl BenchScene for ClipScene {
                 value: self.rect_size,
             },
             Param {
-                name: "clip_mode",
+                id: ParamId::ClipMode,
                 label: "Clip Mode",
                 kind: ParamKind::Select(vec![("None", 0.0), ("Global", 1.0), ("Per-Shape", 2.0)]),
                 value: self.clip_mode as f64,
             },
             Param {
-                name: "clip_method",
+                id: ParamId::ClipMethod,
                 label: "Clip Method",
                 kind: ParamKind::Select(vec![("clip_path", 0.0), ("clip_layer", 1.0)]),
                 value: self.clip_method as f64,
@@ -134,17 +138,24 @@ impl BenchScene for ClipScene {
         ]
     }
 
-    fn set_param(&mut self, name: &str, value: f64) {
-        match name {
-            "num_rects" => self.num_rects = value as usize,
-            "rect_size" => self.rect_size = value,
-            "clip_mode" => self.clip_mode = value as u32,
-            "clip_method" => self.clip_method = value as u32,
+    fn set_param(&mut self, param: ParamId, value: f64) {
+        match param {
+            ParamId::NumRects => self.num_rects = value as usize,
+            ParamId::RectSize => self.rect_size = value,
+            ParamId::ClipMode => self.clip_mode = value as u32,
+            ParamId::ClipMethod => self.clip_method = value as u32,
             _ => {}
         }
     }
 
-    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, time: f64, view: Affine) {
+    fn render(
+        &mut self,
+        backend: &mut dyn Renderer,
+        width: u32,
+        height: u32,
+        time: f64,
+        view: Affine,
+    ) {
         let w = width as f64;
         let h = height as f64;
 
@@ -192,7 +203,7 @@ impl BenchScene for ClipScene {
             }
 
             let rect = Rect::new(r.x, r.y, r.x + size, r.y + size);
-            backend.set_paint(r.color);
+            backend.set_paint(r.color.into());
             backend.fill_rect(&rect);
 
             if self.clip_mode == 2 {

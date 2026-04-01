@@ -5,8 +5,8 @@
     reason = "truncation has no appreciable impact in this benchmark"
 )]
 
-use super::{BenchScene, Param, ParamKind};
-use crate::backend::Backend;
+use super::{BenchScene, Param, ParamId, ParamKind, SceneId};
+use crate::backend::Renderer;
 use usvg::tiny_skia_path::PathSegment;
 use usvg::{Group, Node};
 use vello_common::kurbo::{Affine, BezPath, Stroke};
@@ -221,13 +221,17 @@ fn usvg_paint_to_color(paint: &usvg::Paint, opacity: usvg::Opacity) -> Color {
 // ── BenchScene impl ──────────────────────────────────────────────────────────
 
 impl BenchScene for SvgScene {
+    fn scene_id(&self) -> SceneId {
+        SceneId::Svg
+    }
+
     fn name(&self) -> &str {
         "Vector Graphics"
     }
 
     fn params(&self) -> Vec<Param> {
         vec![Param {
-            name: "svg_asset",
+            id: ParamId::SvgAsset,
             label: "SVG Asset",
             kind: ParamKind::Select(
                 self.assets
@@ -240,8 +244,8 @@ impl BenchScene for SvgScene {
         }]
     }
 
-    fn set_param(&mut self, name: &str, value: f64) {
-        if name == "svg_asset" {
+    fn set_param(&mut self, param: ParamId, value: f64) {
+        if param == ParamId::SvgAsset {
             let idx = value as usize;
             if idx < self.assets.len() {
                 self.selected = idx;
@@ -249,7 +253,14 @@ impl BenchScene for SvgScene {
         }
     }
 
-    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, _time: f64, view: Affine) {
+    fn render(
+        &mut self,
+        backend: &mut dyn Renderer,
+        width: u32,
+        height: u32,
+        _time: f64,
+        view: Affine,
+    ) {
         let asset = &self.assets[self.selected];
 
         // Scale to fit viewport, center.
@@ -266,7 +277,7 @@ impl BenchScene for SvgScene {
                     color,
                 } => {
                     backend.set_transform(base * *transform);
-                    backend.set_paint(*color);
+                    backend.set_paint((*color).into());
                     backend.fill_path(path);
                 }
                 DrawCmd::Stroke {
@@ -276,7 +287,7 @@ impl BenchScene for SvgScene {
                     width,
                 } => {
                     backend.set_transform(base * *transform);
-                    backend.set_paint(*color);
+                    backend.set_paint((*color).into());
                     backend.set_stroke(Stroke::new(*width));
                     backend.stroke_path(path);
                 }

@@ -21,10 +21,10 @@ pub mod ui;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use backend::Backend;
+use backend::{Backend, BackendCapabilities, current_backend_capabilities};
 use fps::FpsTracker;
 use harness::{BenchDef, BenchHarness, HarnessEvent, bench_defs};
-use scenes::BenchScene;
+use scenes::{BenchScene, scene_index};
 use ui::{AppMode, Ui};
 use vello_common::kurbo::Affine;
 use wasm_bindgen::prelude::*;
@@ -41,6 +41,7 @@ extern "C" {
 struct AppState {
     scenes: Vec<Box<dyn BenchScene>>,
     current_scene: usize,
+    backend_caps: BackendCapabilities,
     backend: Backend,
     canvas: HtmlCanvasElement,
     width: u32,
@@ -75,6 +76,15 @@ impl std::fmt::Debug for AppState {
 }
 
 impl AppState {
+    fn scene_params_for_ui(&self, scene_idx: usize) -> Vec<scenes::Param> {
+        let scene = self.scenes[scene_idx].as_ref();
+        scene
+            .params()
+            .into_iter()
+            .filter(|param| self.backend_caps.supports_param(scene.scene_id(), param.id))
+            .collect()
+    }
+
     fn tick(&mut self, now: f64) {
         match self.ui.mode {
             AppMode::Interactive => self.tick_interactive(now),
@@ -91,15 +101,15 @@ impl AppState {
             self.scenes = scenes::all_scenes();
             self.fps_tracker.reset(now);
             self.reset_view();
-            let params = self.scenes[self.current_scene].params();
+            let params = self.scene_params_for_ui(self.current_scene);
             self.ui.rebuild_params(&params);
             self.ui.mark_dirty();
         }
 
         let params = self.ui.read_params();
         let idx = self.current_scene;
-        for &(name, value) in &params {
-            self.scenes[idx].set_param(name, value);
+        for &(param_id, value) in &params {
+            self.scenes[idx].set_param(param_id, value);
         }
 
         let perf = web_sys::window().unwrap().performance().unwrap();
@@ -243,6 +253,7 @@ pub async fn run() {
 
     let bench_scenes = scenes::all_scenes();
     let defs = bench_defs();
+    let backend_caps = current_backend_capabilities();
 
     let saved_state = storage::load_ui_state();
     let initial_mode = match saved_state.mode.as_deref() {
@@ -252,9 +263,19 @@ pub async fn run() {
     let initial_scene = saved_state
         .scene
         .filter(|&i| i < bench_scenes.len())
+        .filter(|&i| backend_caps.supports_scene(bench_scenes[i].scene_id()))
+        .or_else(|| Some(scene_index(scenes::SceneId::Rect)))
         .unwrap_or(0);
 
-    let ui = Ui::build(&document, &bench_scenes, &defs, initial_scene, px_w, px_h);
+    let ui = Ui::build(
+        &document,
+        &bench_scenes,
+        &defs,
+        backend_caps,
+        initial_scene,
+        px_w,
+        px_h,
+    );
     let backend = Backend::new(&canvas, px_w, px_h);
     let now = performance.now();
 
@@ -272,6 +293,7 @@ pub async fn run() {
     let state = Rc::new(RefCell::new(AppState {
         scenes: bench_scenes,
         current_scene: initial_scene,
+        backend_caps,
         backend,
         canvas,
         width: px_w,

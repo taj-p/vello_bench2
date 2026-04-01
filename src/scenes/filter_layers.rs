@@ -5,8 +5,8 @@
     reason = "truncation has no appreciable impact in this benchmark"
 )]
 
-use super::{BenchScene, Param, ParamKind, bounce, delta_time};
-use crate::backend::Backend;
+use super::{BenchScene, Param, ParamId, ParamKind, SceneId, bounce, delta_time};
+use crate::backend::Renderer;
 use crate::rng::Rng;
 use vello_common::color::AlphaColor;
 use vello_common::filter_effects::{EdgeMode, Filter, FilterPrimitive};
@@ -111,6 +111,10 @@ fn random_rect(rng: &mut Rng, w: f64, h: f64) -> AnimatedRect {
 }
 
 impl BenchScene for FilterLayersScene {
+    fn scene_id(&self) -> SceneId {
+        SceneId::FilterLayers
+    }
+
     fn name(&self) -> &str {
         "Filter Layers"
     }
@@ -118,7 +122,7 @@ impl BenchScene for FilterLayersScene {
     fn params(&self) -> Vec<Param> {
         vec![
             Param {
-                name: "num_rects",
+                id: ParamId::NumRects,
                 label: "Rectangles",
                 kind: ParamKind::Slider {
                     min: 1.0,
@@ -128,7 +132,7 @@ impl BenchScene for FilterLayersScene {
                 value: self.num_rects as f64,
             },
             Param {
-                name: "rect_size",
+                id: ParamId::RectSize,
                 label: "Rect Size",
                 kind: ParamKind::Slider {
                     min: 10.0,
@@ -138,7 +142,7 @@ impl BenchScene for FilterLayersScene {
                 value: self.rect_size,
             },
             Param {
-                name: "filter_kind",
+                id: ParamId::FilterKind,
                 label: "Filter",
                 kind: ParamKind::Select(vec![("Drop Shadow", 0.0), ("Blur", 1.0)]),
                 value: if self.filter_kind == FilterKind::Blur {
@@ -148,7 +152,7 @@ impl BenchScene for FilterLayersScene {
                 },
             },
             Param {
-                name: "speed",
+                id: ParamId::Speed,
                 label: "Speed",
                 kind: ParamKind::Slider {
                     min: 0.0,
@@ -158,7 +162,7 @@ impl BenchScene for FilterLayersScene {
                 value: self.speed,
             },
             Param {
-                name: "blur_std_deviation",
+                id: ParamId::BlurStdDeviation,
                 label: "Blur Sigma",
                 kind: ParamKind::Slider {
                     min: 0.0,
@@ -168,7 +172,7 @@ impl BenchScene for FilterLayersScene {
                 value: self.blur_std_deviation as f64,
             },
             Param {
-                name: "shadow_dx",
+                id: ParamId::ShadowDx,
                 label: "Shadow DX",
                 kind: ParamKind::Slider {
                     min: -128.0,
@@ -178,7 +182,7 @@ impl BenchScene for FilterLayersScene {
                 value: self.shadow_dx as f64,
             },
             Param {
-                name: "shadow_dy",
+                id: ParamId::ShadowDy,
                 label: "Shadow DY",
                 kind: ParamKind::Slider {
                     min: -128.0,
@@ -188,7 +192,7 @@ impl BenchScene for FilterLayersScene {
                 value: self.shadow_dy as f64,
             },
             Param {
-                name: "shadow_alpha",
+                id: ParamId::ShadowAlpha,
                 label: "Shadow Alpha",
                 kind: ParamKind::Slider {
                     min: 0.0,
@@ -200,27 +204,34 @@ impl BenchScene for FilterLayersScene {
         ]
     }
 
-    fn set_param(&mut self, name: &str, value: f64) {
-        match name {
-            "num_rects" => self.num_rects = value as usize,
-            "rect_size" => self.rect_size = value,
-            "speed" => self.speed = value,
-            "filter_kind" => {
+    fn set_param(&mut self, param: ParamId, value: f64) {
+        match param {
+            ParamId::NumRects => self.num_rects = value as usize,
+            ParamId::RectSize => self.rect_size = value,
+            ParamId::Speed => self.speed = value,
+            ParamId::FilterKind => {
                 self.filter_kind = if value >= 0.5 {
                     FilterKind::Blur
                 } else {
                     FilterKind::DropShadow
                 };
             }
-            "blur_std_deviation" => self.blur_std_deviation = value as f32,
-            "shadow_dx" => self.shadow_dx = value as f32,
-            "shadow_dy" => self.shadow_dy = value as f32,
-            "shadow_alpha" => self.shadow_alpha = value as u8,
+            ParamId::BlurStdDeviation => self.blur_std_deviation = value as f32,
+            ParamId::ShadowDx => self.shadow_dx = value as f32,
+            ParamId::ShadowDy => self.shadow_dy = value as f32,
+            ParamId::ShadowAlpha => self.shadow_alpha = value as u8,
             _ => {}
         }
     }
 
-    fn render(&mut self, backend: &mut Backend, width: u32, height: u32, time: f64, view: Affine) {
+    fn render(
+        &mut self,
+        backend: &mut dyn Renderer,
+        width: u32,
+        height: u32,
+        time: f64,
+        view: Affine,
+    ) {
         let w = width as f64;
         let h = height as f64;
 
@@ -259,7 +270,7 @@ impl BenchScene for FilterLayersScene {
                 shadow_alpha,
                 rect_state.color,
             ));
-            backend.set_paint(rect_state.color);
+            backend.set_paint(rect_state.color.into());
             backend.fill_rect(&rect);
             backend.pop_layer();
         }
