@@ -12,22 +12,29 @@
 
 <body>
   <script type="module">
-    const renderers = ["hybrid", "cpu", "pathfinder"];
-    const simd = localStorage.getItem("vello_bench_simd") !== "0";
+    const renderers = ["hybrid", "cpu", "pathfinder", "canvas2d"];
     const storedRenderer = localStorage.getItem("vello_bench_renderer") || "hybrid";
     const renderer = renderers.includes(storedRenderer) ? storedRenderer : "hybrid";
-    const simdStr = simd ? "simd" : "nosimd";
+    const simd = renderer === "canvas2d" ? true : localStorage.getItem("vello_bench_simd") !== "0";
+    const simdStr = renderer === "canvas2d" ? "simd" : (simd ? "simd" : "nosimd");
     const mod_path = `./${renderer}-${simdStr}/vello_bench2.js`;
 
     window.__vello_simd = simd;
     window.__vello_renderer = renderer;
-    window.__vello_toggle_simd = () => {
-      localStorage.setItem("vello_bench_simd", simd ? "0" : "1");
-      location.reload();
-    };
+    if (renderer !== "canvas2d") {
+      window.__vello_toggle_simd = () => {
+        localStorage.setItem("vello_bench_simd", simd ? "0" : "1");
+        location.reload();
+      };
+    } else {
+      delete window.__vello_toggle_simd;
+    }
     window.__vello_toggle_renderer = () => {
       const idx = renderers.indexOf(renderer);
       const nextRenderer = renderers[(idx + 1) % renderers.length];
+      if (renderer === "canvas2d" || nextRenderer === "canvas2d") {
+        localStorage.setItem("vello_bench_simd", "1");
+      }
       localStorage.setItem("vello_bench_renderer", nextRenderer);
       location.reload();
     };

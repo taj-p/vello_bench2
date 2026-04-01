@@ -1,4 +1,4 @@
-//! Backend abstraction over vello_hybrid, vello_cpu, and Pathfinder.
+//! Backend abstraction over vello_hybrid, vello_cpu, Pathfinder, and Canvas 2D.
 
 use vello_common::filter_effects::Filter;
 use vello_common::glyph::Glyph;
@@ -11,17 +11,37 @@ use crate::scenes::{ParamId, SceneId};
 
 #[cfg(feature = "cpu")]
 mod cpu;
-#[cfg(all(not(feature = "cpu"), not(feature = "pathfinder")))]
+#[cfg(all(
+    not(feature = "cpu"),
+    not(feature = "pathfinder"),
+    feature = "hybrid"
+))]
 mod hybrid;
 #[cfg(all(not(feature = "cpu"), feature = "pathfinder"))]
 mod pathfinder;
+#[cfg(all(
+    not(feature = "cpu"),
+    not(feature = "pathfinder"),
+    not(feature = "hybrid")
+))]
+mod canvas2d;
 
 #[cfg(feature = "cpu")]
 use cpu as selected;
-#[cfg(all(not(feature = "cpu"), not(feature = "pathfinder")))]
+#[cfg(all(
+    not(feature = "cpu"),
+    not(feature = "pathfinder"),
+    feature = "hybrid"
+))]
 use hybrid as selected;
 #[cfg(all(not(feature = "cpu"), feature = "pathfinder"))]
 use pathfinder as selected;
+#[cfg(all(
+    not(feature = "cpu"),
+    not(feature = "pathfinder"),
+    not(feature = "hybrid")
+))]
+use canvas2d as selected;
 
 use selected::BackendImpl;
 pub use selected::Pixmap;
@@ -58,6 +78,10 @@ impl BackendCapabilities {
 
     pub fn supports_param(self, scene_id: SceneId, param: ParamId) -> bool {
         selected::supports_param(scene_id, param)
+    }
+
+    pub fn supports_param_value(self, scene_id: SceneId, param: ParamId, value: f64) -> bool {
+        selected::supports_param_value(scene_id, param, value)
     }
 }
 

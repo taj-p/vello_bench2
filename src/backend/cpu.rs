@@ -32,6 +32,10 @@ pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
     !(scene_id == SceneId::Rect && param == ParamId::UseDrawImage)
 }
 
+pub fn supports_param_value(_scene_id: SceneId, _param: ParamId, _value: f64) -> bool {
+    true
+}
+
 pub struct BackendImpl {
     ctx: vello_cpu::RenderContext,
     width: u16,

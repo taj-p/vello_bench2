@@ -129,7 +129,26 @@ fn visible_params_for_scene(
     scene
         .params()
         .into_iter()
-        .filter(|param| capabilities.supports_param(scene.scene_id(), param.id))
+        .filter_map(|mut param| {
+            if !capabilities.supports_param(scene.scene_id(), param.id) {
+                return None;
+            }
+            if let ParamKind::Select(options) = &mut param.kind {
+                options.retain(|(_, value)| {
+                    capabilities.supports_param_value(scene.scene_id(), param.id, *value)
+                });
+                if options.is_empty() {
+                    return None;
+                }
+                if !options
+                    .iter()
+                    .any(|(_, value)| (*value - param.value).abs() < f64::EPSILON)
+                {
+                    param.value = options[0].1;
+                }
+            }
+            Some(param)
+        })
         .collect()
 }
 
@@ -1239,7 +1258,7 @@ fn build_top_bar(document: &Document) -> (HtmlElement, HtmlElement, HtmlElement,
         }
         top_bar.append_child(&simd_btn).unwrap();
 
-        // Renderer toggle (hybrid / cpu / pathfinder).
+        // Renderer toggle (hybrid / cpu / pathfinder / canvas2d).
         let renderer_name = js_sys::Reflect::get(&js_sys::global(), &"__vello_renderer".into())
             .ok()
             .and_then(|v| v.as_string())
@@ -1248,6 +1267,7 @@ fn build_top_bar(document: &Document) -> (HtmlElement, HtmlElement, HtmlElement,
         let renderer_label = match renderer_name.as_str() {
             "cpu" => "CPU",
             "pathfinder" => "Pathfinder",
+            "canvas2d" => "Canvas 2D",
             _ => "Hybrid",
         };
         renderer_btn.set_text_content(Some(renderer_label));
@@ -2182,7 +2202,10 @@ fn bench_def_supported(
     }
     def.params
         .iter()
-        .all(|(param_id, _)| capabilities.supports_param(scene.scene_id(), *param_id))
+        .all(|(param_id, value)| {
+            capabilities.supports_param(scene.scene_id(), *param_id)
+                && capabilities.supports_param_value(scene.scene_id(), *param_id, *value)
+        })
         && def
             .scale
             .is_none_or(|scale| capabilities.supports_param(scene.scene_id(), scale.param))

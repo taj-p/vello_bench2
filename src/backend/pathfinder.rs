@@ -44,6 +44,7 @@ pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
     matches!(
         (scene_id, param),
         (SceneId::Rect, ParamId::NumRects)
+            | (SceneId::Rect, ParamId::PaintMode)
             | (SceneId::Rect, ParamId::RectSize)
             | (SceneId::Rect, ParamId::Rotated)
             | (SceneId::Strokes, ParamId::NumStrokes)
@@ -57,6 +58,13 @@ pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
             | (SceneId::Clip, ParamId::RectSize)
             | (SceneId::Clip, ParamId::ClipMode)
             | (SceneId::Clip, ParamId::ClipMethod)
+    )
+}
+
+pub fn supports_param_value(scene_id: SceneId, param: ParamId, value: f64) -> bool {
+    !matches!(
+        (scene_id, param, value as u32),
+        (SceneId::Rect, ParamId::PaintMode, 1 | 2)
     )
 }
 

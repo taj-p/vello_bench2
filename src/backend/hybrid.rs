@@ -17,6 +17,10 @@ pub fn supports_param(_scene_id: SceneId, _param: ParamId) -> bool {
     true
 }
 
+pub fn supports_param_value(_scene_id: SceneId, _param: ParamId, _value: f64) -> bool {
+    true
+}
+
 pub struct BackendImpl {
     ctx: vello_hybrid::Scene,
     renderer: vello_hybrid::WebGlRenderer,

@@ -58,6 +58,8 @@ web-sys = { version = "0.3.83", features = [
     "WebGlTexture",
     "WebGlUniformLocation",
     "CanvasRenderingContext2d",
+    "CanvasGradient",
+    "CanvasWindingRule",
     "ImageData",
     "Performance",
     "Storage",

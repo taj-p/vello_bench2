@@ -114,6 +114,17 @@ jobs:
           wasm-bindgen --target web --out-dir dist/pathfinder-nosimd --no-typescript \
             target/wasm32-unknown-unknown/release/vello_bench2.wasm
 
+      # Canvas 2D + SIMD
+      - name: Build canvas2d+simd
+        run: cargo build --target wasm32-unknown-unknown --release --no-default-features
+        env:
+          RUSTFLAGS: -Ctarget-feature=+simd128
+
+      - name: Bindgen canvas2d+simd
+        run: |
+          wasm-bindgen --target web --out-dir dist/canvas2d-simd --no-typescript \
+            target/wasm32-unknown-unknown/release/vello_bench2.wasm
+
       - name: Copy index.html
         run: cp web/index.html dist/index.html
 

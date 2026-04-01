@@ -10,7 +10,11 @@ build_variant() {
   local out_dir=$3
 
   echo "==> Building $out_dir..."
-  RUSTFLAGS="$rustflags" cargo build --target $TARGET --profile instrument --no-default-features --features "$features"
+  if [[ -n "$features" ]]; then
+    RUSTFLAGS="$rustflags" cargo build --target $TARGET --profile instrument --no-default-features --features "$features"
+  else
+    RUSTFLAGS="$rustflags" cargo build --target $TARGET --profile instrument --no-default-features
+  fi
 
   echo "==> Running wasm-bindgen ($out_dir)..."
   mkdir -p "$DIST/$out_dir"
@@ -46,6 +50,7 @@ should_build cpu-simd      && build_variant cpu    "-Ctarget-feature=+simd128" c
 should_build cpu-nosimd    && build_variant cpu    ""                          cpu-nosimd
 should_build pathfinder-simd   && build_variant pathfinder "-Ctarget-feature=+simd128" pathfinder-simd
 should_build pathfinder-nosimd && build_variant pathfinder ""                          pathfinder-nosimd
+should_build canvas2d-simd     && build_variant "" "-Ctarget-feature=+simd128" canvas2d-simd
 
 cp web/index.html "$DIST/index.html"
 
