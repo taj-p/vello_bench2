@@ -1,6 +1,9 @@
-use pathfinder_canvas::{Canvas, CanvasFontContext, CanvasRenderingContext2D, ColorF, ColorU, RectF};
+use pathfinder_canvas::{
+    Canvas, CanvasFontContext, CanvasRenderingContext2D, ColorF, ColorU, FillRule, LineCap,
+    LineJoin, Path2D, RectF,
+};
 use pathfinder_geometry::transform2d::Transform2F;
-use pathfinder_geometry::vector::{Vector2F, vec2i};
+use pathfinder_geometry::vector::{Vector2F, vec2f, vec2i};
 use pathfinder_renderer::concurrent::executor::SequentialExecutor;
 use pathfinder_renderer::gpu::options::{DestFramebuffer, RendererMode, RendererOptions};
 use pathfinder_renderer::gpu::renderer::Renderer as PathfinderRenderer;
@@ -9,7 +12,7 @@ use pathfinder_resources::embedded::EmbeddedResourceLoader;
 use pathfinder_webgl::WebGlDevice;
 use vello_common::filter_effects::Filter;
 use vello_common::glyph::Glyph;
-use vello_common::kurbo::{Affine, BezPath, Rect, Stroke};
+use vello_common::kurbo::{Affine, BezPath, PathEl, Rect, Stroke};
 use vello_common::paint::{ImageSource, PaintType};
 use vello_common::peniko::{Fill, FontData};
 use wasm_bindgen::JsCast;
@@ -31,7 +34,10 @@ impl Pixmap {
 }
 
 pub fn supports_scene(scene_id: SceneId) -> bool {
-    matches!(scene_id, SceneId::Rect)
+    matches!(
+        scene_id,
+        SceneId::Rect | SceneId::Strokes | SceneId::Polyline | SceneId::Svg | SceneId::Clip
+    )
 }
 
 pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
@@ -40,6 +46,17 @@ pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
         (SceneId::Rect, ParamId::NumRects)
             | (SceneId::Rect, ParamId::RectSize)
             | (SceneId::Rect, ParamId::Rotated)
+            | (SceneId::Strokes, ParamId::NumStrokes)
+            | (SceneId::Strokes, ParamId::CurveType)
+            | (SceneId::Strokes, ParamId::Segments)
+            | (SceneId::Strokes, ParamId::StrokeWidth)
+            | (SceneId::Strokes, ParamId::Cap)
+            | (SceneId::Polyline, ParamId::NumVertices)
+            | (SceneId::Svg, ParamId::SvgAsset)
+            | (SceneId::Clip, ParamId::NumRects)
+            | (SceneId::Clip, ParamId::RectSize)
+            | (SceneId::Clip, ParamId::ClipMode)
+            | (SceneId::Clip, ParamId::ClipMethod)
     )
 }
 
@@ -131,31 +148,48 @@ impl BackendImpl {
         self.ctx.reset_transform();
     }
 
-    pub fn set_stroke(&mut self, _stroke: Stroke) {}
+    pub fn set_stroke(&mut self, stroke: Stroke) {
+        self.ctx.set_stroke(stroke);
+    }
+    
 
     pub fn set_paint_transform(&mut self, _transform: Affine) {}
 
     pub fn reset_paint_transform(&mut self) {}
 
-    pub fn set_fill_rule(&mut self, _fill: Fill) {}
+    pub fn set_fill_rule(&mut self, fill: Fill) {
+        self.ctx.set_fill_rule(fill);
+    }
 
     pub fn fill_rect(&mut self, rect: &Rect) {
         self.ctx.fill_rect(rect);
     }
 
-    pub fn fill_path(&mut self, _path: &BezPath) {}
+    pub fn fill_path(&mut self, path: &BezPath) {
+        self.ctx.fill_path(path);
+    }
 
-    pub fn stroke_path(&mut self, _path: &BezPath) {}
+    pub fn stroke_path(&mut self, path: &BezPath) {
+        self.ctx.stroke_path(path);
+    }
 
-    pub fn push_clip_path(&mut self, _path: &BezPath) {}
+    pub fn push_clip_path(&mut self, path: &BezPath) {
+        self.ctx.push_clip_path(path);
+    }
 
-    pub fn push_clip_layer(&mut self, _path: &BezPath) {}
+    pub fn push_clip_layer(&mut self, path: &BezPath) {
+        self.ctx.push_clip_layer(path);
+    }
 
     pub fn push_filter_layer(&mut self, _filter: Filter) {}
 
-    pub fn pop_clip_path(&mut self) {}
+    pub fn pop_clip_path(&mut self) {
+        self.ctx.pop_clip_path();
+    }
 
-    pub fn pop_layer(&mut self) {}
+    pub fn pop_layer(&mut self) {
+        self.ctx.pop_layer();
+    }
 
     pub fn fill_glyphs(&mut self, _font: &FontData, _font_size: f32, _hint: bool, _glyphs: &[Glyph]) {}
 
@@ -167,6 +201,8 @@ struct DrawContext {
     height: u16,
     canvas: Option<CanvasRenderingContext2D>,
     fill_color: ColorU,
+    fill_rule: FillRule,
+    clip_depth: usize,
 }
 
 impl DrawContext {
@@ -176,6 +212,8 @@ impl DrawContext {
             height,
             canvas: None,
             fill_color: ColorU::black(),
+            fill_rule: FillRule::Winding,
+            clip_depth: 0,
         };
         ctx.reset();
         ctx
@@ -187,6 +225,8 @@ impl DrawContext {
             Canvas::new(Vector2F::new(self.width as f32, self.height as f32))
                 .get_context_2d(font_context),
         );
+        self.fill_rule = FillRule::Winding;
+        self.clip_depth = 0;
     }
 
     fn set_paint(&mut self, paint: PaintType) {
@@ -216,6 +256,30 @@ impl DrawContext {
         }
     }
 
+    fn set_fill_rule(&mut self, fill: Fill) {
+        self.fill_rule = match fill {
+            Fill::EvenOdd => FillRule::EvenOdd,
+            Fill::NonZero => FillRule::Winding,
+        };
+    }
+
+    fn set_stroke(&mut self, stroke: Stroke) {
+        if let Some(canvas) = self.canvas.as_mut() {
+            canvas.set_line_width(stroke.width as f32);
+            canvas.set_miter_limit(stroke.miter_limit as f32);
+            canvas.set_line_cap(match stroke.start_cap {
+                vello_common::kurbo::Cap::Butt => LineCap::Butt,
+                vello_common::kurbo::Cap::Square => LineCap::Square,
+                vello_common::kurbo::Cap::Round => LineCap::Round,
+            });
+            canvas.set_line_join(match stroke.join {
+                vello_common::kurbo::Join::Bevel => LineJoin::Bevel,
+                vello_common::kurbo::Join::Miter => LineJoin::Miter,
+                vello_common::kurbo::Join::Round => LineJoin::Round,
+            });
+        }
+    }
+
     fn fill_rect(&mut self, rect: &Rect) {
         if let Some(canvas) = self.canvas.as_mut() {
             canvas.set_fill_style(self.fill_color);
@@ -225,4 +289,64 @@ impl DrawContext {
             ));
         }
     }
+
+    fn fill_path(&mut self, path: &BezPath) {
+        if let Some(canvas) = self.canvas.as_mut() {
+            canvas.set_fill_style(self.fill_color);
+            canvas.fill_path(path_to_path2d(path), self.fill_rule);
+        }
+    }
+
+    fn stroke_path(&mut self, path: &BezPath) {
+        if let Some(canvas) = self.canvas.as_mut() {
+            canvas.set_stroke_style(self.fill_color);
+            canvas.stroke_path(path_to_path2d(path));
+        }
+    }
+
+    fn push_clip_path(&mut self, path: &BezPath) {
+        if let Some(canvas) = self.canvas.as_mut() {
+            canvas.save();
+            canvas.clip_path(path_to_path2d(path), self.fill_rule);
+            self.clip_depth += 1;
+        }
+    }
+
+    fn push_clip_layer(&mut self, path: &BezPath) {
+        self.push_clip_path(path);
+    }
+
+    fn pop_clip_path(&mut self) {
+        if self.clip_depth > 0 {
+            if let Some(canvas) = self.canvas.as_mut() {
+                canvas.restore();
+            }
+            self.clip_depth -= 1;
+        }
+    }
+
+    fn pop_layer(&mut self) {
+        self.pop_clip_path();
+    }
+}
+
+fn path_to_path2d(path: &BezPath) -> Path2D {
+    let mut out = Path2D::new();
+    for el in path.elements() {
+        match *el {
+            PathEl::MoveTo(p) => out.move_to(vec2f(p.x as f32, p.y as f32)),
+            PathEl::LineTo(p) => out.line_to(vec2f(p.x as f32, p.y as f32)),
+            PathEl::QuadTo(p1, p2) => out.quadratic_curve_to(
+                vec2f(p1.x as f32, p1.y as f32),
+                vec2f(p2.x as f32, p2.y as f32),
+            ),
+            PathEl::CurveTo(p1, p2, p3) => out.bezier_curve_to(
+                vec2f(p1.x as f32, p1.y as f32),
+                vec2f(p2.x as f32, p2.y as f32),
+                vec2f(p3.x as f32, p3.y as f32),
+            ),
+            PathEl::ClosePath => out.close_path(),
+        }
+    }
+    out
 }
