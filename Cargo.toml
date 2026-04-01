@@ -10,6 +10,14 @@ crate-type = ["cdylib", "rlib"]
 default = ["hybrid"]
 hybrid = ["dep:vello_hybrid"]
 cpu = ["dep:vello_cpu"]
+pathfinder = [
+    "dep:pathfinder_canvas",
+    "dep:pathfinder_color",
+    "dep:pathfinder_geometry",
+    "dep:pathfinder_renderer",
+    "dep:pathfinder_resources",
+    "dep:pathfinder_webgl",
+]
 
 [dependencies]
 bytemuck = "1.25"
@@ -24,6 +32,12 @@ usvg = { version = "0.45.1" }
 vello_common = { git = "https://github.com/linebender/vello", rev = "c08ba6e1" }
 vello_hybrid = { git = "https://github.com/linebender/vello", rev = "c08ba6e1", features = ["webgl", "text"], optional = true }
 vello_cpu = { git = "https://github.com/linebender/vello", rev = "c08ba6e1", features = ["text"], optional = true }
+pathfinder_canvas = { git = "https://github.com/servo/pathfinder", branch = "main", optional = true }
+pathfinder_color = { git = "https://github.com/servo/pathfinder", branch = "main", optional = true }
+pathfinder_geometry = { git = "https://github.com/servo/pathfinder", branch = "main", optional = true }
+pathfinder_renderer = { git = "https://github.com/servo/pathfinder", branch = "main", optional = true }
+pathfinder_resources = { git = "https://github.com/servo/pathfinder", branch = "main", optional = true }
+pathfinder_webgl = { git = "https://github.com/servo/pathfinder", branch = "main", optional = true }
 js-sys = "0.3.83"
 wasm-bindgen = "=0.2.114"
 wasm-bindgen-futures = "0.4.56"

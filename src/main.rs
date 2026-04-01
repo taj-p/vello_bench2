@@ -7,7 +7,7 @@ fn main() {
     #[cfg(target_arch = "wasm32")]
     {
         console_error_panic_hook::set_once();
-        console_log::init_with_level(log::Level::Debug).unwrap();
+        console_log::init_with_level(log::Level::Warn).unwrap();
 
         wasm_bindgen_futures::spawn_local(async move {
             vello_bench2::run().await;

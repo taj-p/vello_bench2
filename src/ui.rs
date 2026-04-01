@@ -1226,14 +1226,18 @@ fn build_top_bar(document: &Document) -> (HtmlElement, HtmlElement, HtmlElement,
         }
         top_bar.append_child(&simd_btn).unwrap();
 
-        // Renderer toggle (hybrid / cpu).
+        // Renderer toggle (hybrid / cpu / pathfinder).
         let renderer_name = js_sys::Reflect::get(&js_sys::global(), &"__vello_renderer".into())
             .ok()
             .and_then(|v| v.as_string())
             .unwrap_or_else(|| "hybrid".to_string());
-        let is_hybrid = renderer_name == "hybrid";
         let renderer_btn = div(document);
-        renderer_btn.set_text_content(Some(if is_hybrid { "Hybrid" } else { "CPU" }));
+        let renderer_label = match renderer_name.as_str() {
+            "cpu" => "CPU",
+            "pathfinder" => "Pathfinder",
+            _ => "Hybrid",
+        };
+        renderer_btn.set_text_content(Some(renderer_label));
         set(
             &renderer_btn,
             &[

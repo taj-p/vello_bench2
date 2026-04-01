@@ -206,7 +206,7 @@ impl AppState {
     }
 }
 
-#[cfg(not(feature = "cpu"))]
+#[cfg(all(not(feature = "cpu"), not(feature = "pathfinder")))]
 pub(crate) fn gpu_sync(renderer: &vello_hybrid::WebGlRenderer) {
     let gl = renderer.gl_context();
     let mut pixel = [0_u8; 4];

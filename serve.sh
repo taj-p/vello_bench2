@@ -44,6 +44,8 @@ should_build hybrid-simd   && build_variant hybrid "-Ctarget-feature=+simd128" h
 should_build hybrid-nosimd && build_variant hybrid ""                          hybrid-nosimd
 should_build cpu-simd      && build_variant cpu    "-Ctarget-feature=+simd128" cpu-simd
 should_build cpu-nosimd    && build_variant cpu    ""                          cpu-nosimd
+should_build pathfinder-simd   && build_variant pathfinder "-Ctarget-feature=+simd128" pathfinder-simd
+should_build pathfinder-nosimd && build_variant pathfinder ""                          pathfinder-nosimd
 
 cp web/index.html "$DIST/index.html"
 

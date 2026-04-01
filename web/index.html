@@ -12,8 +12,10 @@
 
 <body>
   <script type="module">
+    const renderers = ["hybrid", "cpu", "pathfinder"];
     const simd = localStorage.getItem("vello_bench_simd") !== "0";
-    const renderer = localStorage.getItem("vello_bench_renderer") || "hybrid";
+    const storedRenderer = localStorage.getItem("vello_bench_renderer") || "hybrid";
+    const renderer = renderers.includes(storedRenderer) ? storedRenderer : "hybrid";
     const simdStr = simd ? "simd" : "nosimd";
     const mod_path = `./${renderer}-${simdStr}/vello_bench2.js`;
 
@@ -24,7 +26,9 @@
       location.reload();
     };
     window.__vello_toggle_renderer = () => {
-      localStorage.setItem("vello_bench_renderer", renderer === "hybrid" ? "cpu" : "hybrid");
+      const idx = renderers.indexOf(renderer);
+      const nextRenderer = renderers[(idx + 1) % renderers.length];
+      localStorage.setItem("vello_bench_renderer", nextRenderer);
       location.reload();
     };
 

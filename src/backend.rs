@@ -152,7 +152,180 @@ mod inner {
 
 // ── Hybrid (WebGL) backend ───────────────────────────────────────────────────
 
-#[cfg(not(feature = "cpu"))]
+#[cfg(feature = "pathfinder")]
+mod inner {
+    use pathfinder_canvas::{Canvas, CanvasFontContext, CanvasRenderingContext2D, ColorU, RectF};
+    use pathfinder_geometry::transform2d::Transform2F;
+    use pathfinder_geometry::vector::{Vector2F, vec2i};
+    use pathfinder_renderer::concurrent::executor::SequentialExecutor;
+    use pathfinder_renderer::gpu::options::{DestFramebuffer, RendererMode, RendererOptions};
+    use pathfinder_renderer::gpu::renderer::Renderer as PathfinderRenderer;
+    use pathfinder_renderer::options::BuildOptions;
+    use pathfinder_resources::embedded::EmbeddedResourceLoader;
+    use pathfinder_webgl::WebGlDevice;
+    use vello_common::filter_effects::Filter;
+    use vello_common::glyph::Glyph;
+    use vello_common::kurbo::{Affine, BezPath, Rect, Stroke};
+    use vello_common::paint::{ImageSource, PaintType};
+    use vello_common::peniko::{Fill, FontData};
+    use wasm_bindgen::JsCast;
+    use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
+
+    pub struct Pixmap;
+
+    impl Pixmap {
+        pub fn from_parts_with_opacity<T>(
+            _pixels: Vec<T>,
+            _width: u16,
+            _height: u16,
+            _may_have_opacities: bool,
+        ) -> Self {
+            Self
+        }
+    }
+
+    pub struct DrawContext {
+        width: u16,
+        height: u16,
+        canvas: Option<CanvasRenderingContext2D>,
+        fill_color: ColorU,
+    }
+
+    impl DrawContext {
+        pub fn new(width: u16, height: u16) -> Self {
+            let mut ctx = Self {
+                width,
+                height,
+                canvas: None,
+                fill_color: ColorU::black(),
+            };
+            ctx.reset();
+            ctx
+        }
+
+        pub fn reset(&mut self) {
+            let font_context = CanvasFontContext::from_system_source();
+            self.canvas = Some(
+                Canvas::new(Vector2F::new(self.width as f32, self.height as f32))
+                    .get_context_2d(font_context),
+            );
+        }
+
+        pub fn set_paint(&mut self, paint: PaintType) {
+            if let PaintType::Solid(color) = paint {
+                let [r, g, b, a] = color.to_rgba8().to_u8_array();
+                self.fill_color = ColorU::new(r, g, b, a);
+            }
+        }
+
+        pub fn set_transform(&mut self, transform: Affine) {
+            if let Some(canvas) = self.canvas.as_mut() {
+                let c = transform.as_coeffs();
+                canvas.set_transform(&Transform2F::row_major(
+                    c[0] as f32,
+                    c[2] as f32,
+                    c[4] as f32,
+                    c[1] as f32,
+                    c[3] as f32,
+                    c[5] as f32,
+                ));
+            }
+        }
+
+        pub fn reset_transform(&mut self) {
+            if let Some(canvas) = self.canvas.as_mut() {
+                canvas.reset_transform();
+            }
+        }
+
+        pub fn set_stroke(&mut self, _stroke: Stroke) {}
+        pub fn set_paint_transform(&mut self, _transform: Affine) {}
+        pub fn reset_paint_transform(&mut self) {}
+        pub fn set_fill_rule(&mut self, _fill: Fill) {}
+
+        pub fn fill_rect(&mut self, rect: &Rect) {
+            if let Some(canvas) = self.canvas.as_mut() {
+                canvas.set_fill_style(self.fill_color);
+                canvas.fill_rect(RectF::new(
+                    Vector2F::new(rect.x0 as f32, rect.y0 as f32),
+                    Vector2F::new(rect.width() as f32, rect.height() as f32),
+                ));
+            }
+        }
+
+        pub fn fill_path(&mut self, _path: &BezPath) {}
+        pub fn stroke_path(&mut self, _path: &BezPath) {}
+        pub fn push_clip_path(&mut self, _path: &BezPath) {}
+        pub fn push_clip_layer(&mut self, _path: &BezPath) {}
+        pub fn push_filter_layer(&mut self, _filter: Filter) {}
+        pub fn pop_clip_path(&mut self) {}
+        pub fn pop_layer(&mut self) {}
+        pub fn fill_glyphs(&mut self, _font: &FontData, _font_size: f32, _hint: bool, _glyphs: &[Glyph]) {}
+    }
+
+    pub struct BackendInner {
+        renderer: PathfinderRenderer<WebGlDevice>,
+    }
+
+    impl std::fmt::Debug for BackendInner {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("Backend(pathfinder)").finish()
+        }
+    }
+
+    impl BackendInner {
+        pub fn new(canvas: &HtmlCanvasElement) -> Self {
+            let context: WebGl2RenderingContext = canvas
+                .get_context("webgl2")
+                .unwrap()
+                .unwrap()
+                .dyn_into()
+                .unwrap();
+            let device = WebGlDevice::new(context);
+            let framebuffer_size = vec2i(canvas.width() as i32, canvas.height() as i32);
+            let mode = RendererMode::default_for_device(&device);
+            let options = RendererOptions {
+                dest: DestFramebuffer::full_window(framebuffer_size),
+                background_color: Some(pathfinder_canvas::ColorF::new(
+                    17.0 / 255.0,
+                    17.0 / 255.0,
+                    27.0 / 255.0,
+                    1.0,
+                )),
+                ..RendererOptions::default()
+            };
+            let loader = EmbeddedResourceLoader::new();
+            let renderer = PathfinderRenderer::new(device, &loader, mode, options);
+            Self { renderer }
+        }
+
+        pub fn render_offscreen(&mut self, ctx: &mut DrawContext) {
+            if let Some(canvas) = ctx.canvas.take() {
+                let mut scene = canvas.into_canvas().into_scene();
+                scene.build_and_render(
+                    &mut self.renderer,
+                    BuildOptions::default(),
+                    SequentialExecutor,
+                );
+            }
+        }
+
+        pub fn blit(&mut self) {}
+
+        pub fn resize(&mut self, w: u32, h: u32) {
+            self.renderer.options_mut().dest = DestFramebuffer::full_window(vec2i(w as i32, h as i32));
+            self.renderer.dest_framebuffer_size_changed();
+        }
+
+        pub fn upload_image(&mut self, _ctx: &mut DrawContext, _pixmap: Pixmap) -> ImageSource {
+            panic!("pathfinder image upload not implemented")
+        }
+
+        pub fn sync(&self) {}
+    }
+}
+
+#[cfg(all(not(feature = "cpu"), not(feature = "pathfinder")))]
 mod inner {
     use vello_common::paint::ImageSource;
     pub use vello_hybrid::Pixmap;
@@ -233,17 +406,37 @@ pub struct BackendCapabilities;
 
 impl BackendCapabilities {
     pub fn supports_scene(self, _scene_id: SceneId) -> bool {
-        true
+        #[cfg(feature = "pathfinder")]
+        {
+            matches!(_scene_id, SceneId::Rect)
+        }
+        #[cfg(not(feature = "pathfinder"))]
+        {
+            true
+        }
     }
 
     pub fn supports_param(self, _scene_id: SceneId, _param: ParamId) -> bool {
-        #[cfg(feature = "cpu")]
+        #[cfg(feature = "pathfinder")]
+        {
+            matches!(
+                (_scene_id, _param),
+                (SceneId::Rect, ParamId::NumRects)
+                    | (SceneId::Rect, ParamId::RectSize)
+                    | (SceneId::Rect, ParamId::Rotated)
+            )
+        }
+        #[cfg(all(not(feature = "pathfinder"), feature = "cpu"))]
         {
             if _scene_id == SceneId::Rect && _param == ParamId::UseDrawImage {
                 return false;
             }
+            true
         }
-        true
+        #[cfg(all(not(feature = "pathfinder"), not(feature = "cpu")))]
+        {
+            true
+        }
     }
 }
 
@@ -405,11 +598,18 @@ impl Renderer for Backend {
     }
 
     fn fill_glyphs(&mut self, font: &FontData, font_size: f32, hint: bool, glyphs: &[Glyph]) {
+        #[cfg(feature = "pathfinder")]
+        {
+            self.ctx.fill_glyphs(font, font_size, hint, glyphs);
+        }
+        #[cfg(not(feature = "pathfinder"))]
+        {
         self.ctx
             .glyph_run(font)
             .font_size(font_size)
             .hint(hint)
             .fill_glyphs(glyphs.iter().copied());
+        }
     }
 
     fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool) {
