@@ -2255,15 +2255,12 @@ fn bench_def_supported(
     if !capabilities.supports_scene(scene.scene_id()) {
         return false;
     }
-    def.params
-        .iter()
-        .all(|(param_id, value)| {
-            capabilities.supports_param(scene.scene_id(), *param_id)
-                && capabilities.supports_param_value(scene.scene_id(), *param_id, *value)
-        })
-        && def
-            .scale
-            .is_none_or(|scale| capabilities.supports_param(scene.scene_id(), scale.param))
+    def.params.iter().all(|(param_id, value)| {
+        capabilities.supports_param(scene.scene_id(), *param_id)
+            && capabilities.supports_param_value(scene.scene_id(), *param_id, *value)
+    }) && def
+        .scale
+        .is_none_or(|scale| capabilities.supports_param(scene.scene_id(), scale.param))
 }
 
 fn build_lightbox(

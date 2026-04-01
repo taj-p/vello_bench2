@@ -10,12 +10,12 @@ use pathfinder_renderer::gpu::renderer::Renderer as PathfinderRenderer;
 use pathfinder_renderer::options::BuildOptions;
 use pathfinder_resources::embedded::EmbeddedResourceLoader;
 use pathfinder_webgl::WebGlDevice;
-use vello_common::pixmap::Pixmap;
 use vello_common::filter_effects::Filter;
 use vello_common::glyph::Glyph;
 use vello_common::kurbo::{Affine, BezPath, PathEl, Rect, Stroke};
 use vello_common::paint::{ImageSource, PaintType};
 use vello_common::peniko::{Fill, FontData};
+use vello_common::pixmap::Pixmap;
 use wasm_bindgen::JsCast;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 

@@ -21,7 +21,9 @@ pub mod ui;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use backend::{Backend, BackendCapabilities, BackendKind, current_backend_capabilities, current_backend_kind};
+use backend::{
+    Backend, BackendCapabilities, BackendKind, current_backend_capabilities, current_backend_kind,
+};
 use fps::FpsTracker;
 use harness::{BenchDef, BenchHarness, HarnessEvent, bench_defs};
 use scenes::{BenchScene, scene_index};
@@ -121,7 +123,8 @@ impl AppState {
         self.backend_caps = current_backend_capabilities(kind);
         let replaced_canvas = if backend_uses_webgl(self.backend.kind()) != backend_uses_webgl(kind)
         {
-            self.canvas = replace_canvas_element(&self.canvas, self.width, self.height, self.ui.mode);
+            self.canvas =
+                replace_canvas_element(&self.canvas, self.width, self.height, self.ui.mode);
             true
         } else {
             false
@@ -154,11 +157,8 @@ impl AppState {
         self.ui.set_renderer(kind);
         self.ui
             .rebuild_scene_options(&self.scenes, self.backend_caps, self.current_scene);
-        self.ui.update_bench_support(
-            &self.bench_defs,
-            &self.scenes,
-            self.backend_caps,
-        );
+        self.ui
+            .update_bench_support(&self.bench_defs, &self.scenes, self.backend_caps);
         let params = self.scene_params_for_ui(self.current_scene);
         self.ui.rebuild_params(&params);
         self.fps_tracker.reset(now);
@@ -316,12 +316,7 @@ fn backend_uses_webgl(kind: BackendKind) -> bool {
     !matches!(kind, BackendKind::Canvas2d)
 }
 
-fn configure_canvas(
-    canvas: &HtmlCanvasElement,
-    px_w: u32,
-    px_h: u32,
-    mode: AppMode,
-) {
+fn configure_canvas(canvas: &HtmlCanvasElement, px_w: u32, px_h: u32, mode: AppMode) {
     let window = web_sys::window().unwrap();
     let css_w = window.inner_width().unwrap().as_f64().unwrap() as u32;
     let css_h = window.inner_height().unwrap().as_f64().unwrap() as u32;
@@ -346,7 +341,12 @@ fn configure_canvas(
     .unwrap();
 }
 
-fn make_canvas(document: &web_sys::Document, px_w: u32, px_h: u32, mode: AppMode) -> HtmlCanvasElement {
+fn make_canvas(
+    document: &web_sys::Document,
+    px_w: u32,
+    px_h: u32,
+    mode: AppMode,
+) -> HtmlCanvasElement {
     let canvas: HtmlCanvasElement = document
         .create_element("canvas")
         .unwrap()
@@ -402,7 +402,15 @@ pub async fn run() {
         .or_else(|| Some(scene_index(scenes::SceneId::Rect)))
         .unwrap_or(0);
 
-    let ui = Ui::build(&document, &bench_scenes, &defs, backend_caps, initial_scene, px_w, px_h);
+    let ui = Ui::build(
+        &document,
+        &bench_scenes,
+        &defs,
+        backend_caps,
+        initial_scene,
+        px_w,
+        px_h,
+    );
     let backend = Backend::new(&canvas, px_w, px_h, backend_kind);
     let now = performance.now();
 

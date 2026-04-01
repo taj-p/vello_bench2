@@ -1,7 +1,6 @@
-use vello_common::filter::PreparedFilter;
 use js_sys::{Function, Reflect};
+use vello_common::filter::PreparedFilter;
 use vello_common::filter_effects::Filter;
-use vello_common::pixmap::Pixmap;
 use vello_common::glyph::Glyph;
 use vello_common::kurbo::{Affine, BezPath, PathEl, Rect, Stroke};
 use vello_common::paint::{ImageSource, PaintType};
@@ -10,6 +9,7 @@ use vello_common::peniko::{
     Fill, FontData, Gradient, GradientKind, LinearGradientPosition, RadialGradientPosition,
     SweepGradientPosition,
 };
+use vello_common::pixmap::Pixmap;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{CanvasGradient, CanvasRenderingContext2d, CanvasWindingRule, HtmlCanvasElement};
 
@@ -306,9 +306,7 @@ fn trace_path(ctx: &CanvasRenderingContext2d, path: &BezPath) {
             PathEl::MoveTo(p) => ctx.move_to(p.x, p.y),
             PathEl::LineTo(p) => ctx.line_to(p.x, p.y),
             PathEl::QuadTo(p1, p2) => ctx.quadratic_curve_to(p1.x, p1.y, p2.x, p2.y),
-            PathEl::CurveTo(p1, p2, p3) => {
-                ctx.bezier_curve_to(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
-            }
+            PathEl::CurveTo(p1, p2, p3) => ctx.bezier_curve_to(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y),
             PathEl::ClosePath => ctx.close_path(),
         }
     }

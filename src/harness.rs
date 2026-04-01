@@ -160,7 +160,8 @@ impl BenchHarness {
                 apply_params(scene, def.params, def.scale, self.preset);
 
                 let canvas = self.bench_canvas.as_ref().unwrap();
-                self.bench_backend = Some(Backend::new(canvas, width, height, current_backend_kind()));
+                self.bench_backend =
+                    Some(Backend::new(canvas, width, height, current_backend_kind()));
                 let be = self.bench_backend.as_mut().unwrap();
                 render_one(scene, be, width, height, perf.now());
                 be.sync();
