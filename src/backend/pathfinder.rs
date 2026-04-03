@@ -1,7 +1,8 @@
 use pathfinder_canvas::{
-    Canvas, CanvasFontContext, CanvasRenderingContext2D, ColorF, ColorU, FillRule, LineCap,
-    LineJoin, Path2D, RectF,
+    Canvas, CanvasFontContext, CanvasRenderingContext2D, ColorF, ColorU, FillRule, ImageData,
+    LineCap, LineJoin, Path2D, RectF,
 };
+use pathfinder_content::pattern::{Image as PathfinderImage, Pattern};
 use pathfinder_geometry::transform2d::Transform2F;
 use pathfinder_geometry::vector::{Vector2F, vec2f, vec2i};
 use pathfinder_renderer::concurrent::executor::SequentialExecutor;
@@ -13,7 +14,7 @@ use pathfinder_webgl::WebGlDevice;
 use vello_common::filter_effects::Filter;
 use vello_common::glyph::Glyph;
 use vello_common::kurbo::{Affine, BezPath, PathEl, Rect, Stroke};
-use vello_common::paint::{ImageSource, PaintType};
+use vello_common::paint::{ImageId, ImageSource, PaintType};
 use vello_common::peniko::{Fill, FontData};
 use vello_common::pixmap::Pixmap;
 use wasm_bindgen::JsCast;
@@ -35,6 +36,9 @@ pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
             | (SceneId::Rect, ParamId::PaintMode)
             | (SceneId::Rect, ParamId::RectSize)
             | (SceneId::Rect, ParamId::Rotated)
+            | (SceneId::Rect, ParamId::ImageFilter)
+            | (SceneId::Rect, ParamId::ImageOpaque)
+            | (SceneId::Rect, ParamId::UseDrawImage)
             | (SceneId::Strokes, ParamId::NumStrokes)
             | (SceneId::Strokes, ParamId::CurveType)
             | (SceneId::Strokes, ParamId::Segments)
@@ -50,15 +54,13 @@ pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
 }
 
 pub fn supports_param_value(scene_id: SceneId, param: ParamId, value: f64) -> bool {
-    !matches!(
-        (scene_id, param, value as u32),
-        (SceneId::Rect, ParamId::PaintMode, 1 | 2)
-    )
+    !matches!((scene_id, param, value as u32), (SceneId::Rect, ParamId::PaintMode, 1))
 }
 
 pub struct BackendImpl {
     ctx: DrawContext,
     renderer: PathfinderRenderer<WebGlDevice>,
+    uploaded_images: Vec<UploadedImage>,
 }
 
 impl std::fmt::Debug for BackendImpl {
@@ -87,6 +89,7 @@ impl BackendImpl {
         Self {
             ctx: DrawContext::new(w as u16, h as u16),
             renderer: PathfinderRenderer::new(device, &loader, mode, options),
+            uploaded_images: Vec::new(),
         }
     }
 
@@ -123,12 +126,15 @@ impl BackendImpl {
         self.renderer.dest_framebuffer_size_changed();
     }
 
-    pub fn upload_image(&mut self, _pixmap: Pixmap) -> ImageSource {
-        panic!("pathfinder image upload not implemented")
+    pub fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
+        let may_have_opacities = pixmap.may_have_opacities();
+        let id = ImageId::new(self.uploaded_images.len() as u32);
+        self.uploaded_images.push(UploadedImage::from_pixmap(pixmap));
+        ImageSource::opaque_id_with_opacity_hint(id, may_have_opacities)
     }
 
     pub fn set_paint(&mut self, paint: PaintType) {
-        self.ctx.set_paint(paint);
+        self.ctx.set_paint(paint, &self.uploaded_images);
     }
 
     pub fn set_transform(&mut self, transform: Affine) {
@@ -190,16 +196,47 @@ impl BackendImpl {
     ) {
     }
 
-    pub fn draw_image(&mut self, _image: ImageSource, _rect: &Rect, _bilinear: bool) {}
+    pub fn draw_text(
+        &mut self,
+        _font: &FontData,
+        _font_size: f32,
+        _hint: bool,
+        _text: &str,
+        _x: f32,
+        _y: f32,
+    ) {
+    }
+
+    pub fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool) {
+        self.ctx
+            .draw_image(image, rect, bilinear, &self.uploaded_images);
+    }
 }
 
 struct DrawContext {
     width: u16,
     height: u16,
     canvas: Option<CanvasRenderingContext2D>,
-    fill_color: ColorU,
+    current_paint: PaintState,
     fill_rule: FillRule,
     clip_depth: usize,
+}
+
+#[derive(Clone)]
+enum PaintState {
+    Solid(ColorU),
+    Image(ImagePaint),
+}
+
+#[derive(Clone)]
+struct ImagePaint {
+    image: PathfinderImage,
+    bilinear: bool,
+    alpha: f32,
+}
+
+struct UploadedImage {
+    image: PathfinderImage,
 }
 
 impl DrawContext {
@@ -208,7 +245,7 @@ impl DrawContext {
             width,
             height,
             canvas: None,
-            fill_color: ColorU::black(),
+            current_paint: PaintState::Solid(ColorU::black()),
             fill_rule: FillRule::Winding,
             clip_depth: 0,
         };
@@ -226,11 +263,24 @@ impl DrawContext {
         self.clip_depth = 0;
     }
 
-    fn set_paint(&mut self, paint: PaintType) {
-        if let PaintType::Solid(color) = paint {
-            let [r, g, b, a] = color.to_rgba8().to_u8_array();
-            self.fill_color = ColorU::new(r, g, b, a);
-        }
+    fn set_paint(&mut self, paint: PaintType, uploaded_images: &[UploadedImage]) {
+        self.current_paint = match paint {
+            PaintType::Solid(color) => {
+                let [r, g, b, a] = color.to_rgba8().to_u8_array();
+                PaintState::Solid(ColorU::new(r, g, b, a))
+            }
+            PaintType::Image(image) => {
+                let Some(uploaded) = resolve_uploaded_image(uploaded_images, &image.image) else {
+                    return;
+                };
+                PaintState::Image(ImagePaint {
+                    image: uploaded.image.clone(),
+                    bilinear: !matches!(image.sampler.quality, vello_common::peniko::ImageQuality::Low),
+                    alpha: image.sampler.alpha,
+                })
+            }
+            PaintType::Gradient(_) => PaintState::Solid(ColorU::transparent_black()),
+        };
     }
 
     fn set_transform(&mut self, transform: Affine) {
@@ -279,25 +329,37 @@ impl DrawContext {
 
     fn fill_rect(&mut self, rect: &Rect) {
         if let Some(canvas) = self.canvas.as_mut() {
-            canvas.set_fill_style(self.fill_color);
-            canvas.fill_rect(RectF::new(
+            let rectf = RectF::new(
                 Vector2F::new(rect.x0 as f32, rect.y0 as f32),
                 Vector2F::new(rect.width() as f32, rect.height() as f32),
-            ));
+            );
+            match &self.current_paint {
+                PaintState::Solid(fill_color) => {
+                    canvas.set_fill_style(*fill_color);
+                    canvas.fill_rect(rectf);
+                }
+                PaintState::Image(image) => {
+                    draw_pathfinder_image(canvas, image, rectf);
+                }
+            }
         }
     }
 
     fn fill_path(&mut self, path: &BezPath) {
         if let Some(canvas) = self.canvas.as_mut() {
-            canvas.set_fill_style(self.fill_color);
-            canvas.fill_path(path_to_path2d(path), self.fill_rule);
+            if let PaintState::Solid(fill_color) = self.current_paint {
+                canvas.set_fill_style(fill_color);
+                canvas.fill_path(path_to_path2d(path), self.fill_rule);
+            }
         }
     }
 
     fn stroke_path(&mut self, path: &BezPath) {
         if let Some(canvas) = self.canvas.as_mut() {
-            canvas.set_stroke_style(self.fill_color);
-            canvas.stroke_path(path_to_path2d(path));
+            if let PaintState::Solid(fill_color) = self.current_paint {
+                canvas.set_stroke_style(fill_color);
+                canvas.stroke_path(path_to_path2d(path));
+            }
         }
     }
 
@@ -324,6 +386,77 @@ impl DrawContext {
 
     fn pop_layer(&mut self) {
         self.pop_clip_path();
+    }
+
+    fn draw_image(
+        &mut self,
+        image: ImageSource,
+        rect: &Rect,
+        bilinear: bool,
+        uploaded_images: &[UploadedImage],
+    ) {
+        let Some(uploaded) = resolve_uploaded_image(uploaded_images, &image) else {
+            return;
+        };
+        if let Some(canvas) = self.canvas.as_mut() {
+            draw_pathfinder_image(
+                canvas,
+                &ImagePaint {
+                    image: uploaded.image.clone(),
+                    bilinear,
+                    alpha: 1.0,
+                },
+                RectF::new(
+                    Vector2F::new(rect.x0 as f32, rect.y0 as f32),
+                    Vector2F::new(rect.width() as f32, rect.height() as f32),
+                ),
+            );
+        }
+    }
+}
+
+impl UploadedImage {
+    fn from_pixmap(pixmap: Pixmap) -> Self {
+        let width = pixmap.width();
+        let height = pixmap.height();
+        let data = pixmap
+            .take_unpremultiplied()
+            .into_iter()
+            .map(|rgba| ColorU::new(rgba.r, rgba.g, rgba.b, rgba.a))
+            .collect();
+        let image = ImageData {
+            data,
+            size: vec2i(width as i32, height as i32),
+        }
+        .into_image();
+        Self { image }
+    }
+}
+
+fn resolve_uploaded_image<'a>(
+    uploaded_images: &'a [UploadedImage],
+    image: &ImageSource,
+) -> Option<&'a UploadedImage> {
+    match image {
+        ImageSource::OpaqueId { id, .. } => uploaded_images.get(id.as_u32() as usize),
+        ImageSource::Pixmap(_) => None,
+    }
+}
+
+fn draw_pathfinder_image(
+    canvas: &mut CanvasRenderingContext2D,
+    image: &ImagePaint,
+    rect: RectF,
+) {
+    let mut pattern = Pattern::from_image(image.image.clone());
+    pattern.set_smoothing_enabled(image.bilinear);
+    let old_alpha = canvas.global_alpha();
+    if image.alpha != 1.0 {
+        canvas.set_global_alpha(old_alpha * image.alpha);
+    }
+    canvas.draw_image(pattern, rect);
+    if image.alpha != 1.0 {
+        canvas.set_global_alpha(old_alpha);
     }
 }
 

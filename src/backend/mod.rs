@@ -5,6 +5,8 @@ mod cpu;
 mod hybrid;
 mod pathfinder;
 
+use skrifa::MetadataProvider;
+use skrifa::raw::FileRef;
 use vello_common::filter_effects::Filter;
 use vello_common::glyph::Glyph;
 use vello_common::kurbo::{Affine, BezPath, Rect, Stroke};
@@ -81,8 +83,33 @@ pub trait Renderer {
     fn pop_clip_path(&mut self);
     fn pop_layer(&mut self);
     fn fill_glyphs(&mut self, font: &FontData, font_size: f32, hint: bool, glyphs: &[Glyph]);
+    fn draw_text(&mut self, font: &FontData, font_size: f32, hint: bool, text: &str, x: f32, y: f32);
     fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool);
     fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource;
+}
+
+pub fn layout_text_glyphs(
+    font: &FontData,
+    font_size: f32,
+    text: &str,
+    x: f32,
+    y: f32,
+) -> Vec<Glyph> {
+    let font_ref = match FileRef::new(font.data.as_ref()).unwrap() {
+        FileRef::Font(f) => f,
+        FileRef::Collection(c) => c.get(font.index).unwrap(),
+    };
+    let size = skrifa::instance::Size::new(font_size);
+    let charmap = font_ref.charmap();
+    let glyph_metrics = font_ref.glyph_metrics(size, skrifa::instance::LocationRef::default());
+    let mut pen_x = x;
+    let mut glyphs = Vec::with_capacity(text.len());
+    for ch in text.chars() {
+        let gid = charmap.map(ch).unwrap_or_default();
+        glyphs.push(Glyph { id: gid.to_u32(), x: pen_x, y });
+        pen_x += glyph_metrics.advance_width(gid).unwrap_or_default();
+    }
+    glyphs
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -375,6 +402,23 @@ impl Renderer for Backend {
             BackendImpl::Cpu(inner) => inner.fill_glyphs(font, font_size, hint, glyphs),
             BackendImpl::Pathfinder(inner) => inner.fill_glyphs(font, font_size, hint, glyphs),
             BackendImpl::Canvas2d(inner) => inner.fill_glyphs(font, font_size, hint, glyphs),
+        }
+    }
+
+    fn draw_text(
+        &mut self,
+        font: &FontData,
+        font_size: f32,
+        hint: bool,
+        text: &str,
+        x: f32,
+        y: f32,
+    ) {
+        match &mut self.inner {
+            BackendImpl::Hybrid(inner) => inner.draw_text(font, font_size, hint, text, x, y),
+            BackendImpl::Cpu(inner) => inner.draw_text(font, font_size, hint, text, x, y),
+            BackendImpl::Pathfinder(inner) => inner.draw_text(font, font_size, hint, text, x, y),
+            BackendImpl::Canvas2d(inner) => inner.draw_text(font, font_size, hint, text, x, y),
         }
     }
 

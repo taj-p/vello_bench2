@@ -12,7 +12,6 @@ use crate::backend::Renderer;
 use crate::rng::Rng;
 use skrifa::MetadataProvider;
 use skrifa::raw::FileRef;
-use vello_common::glyph::Glyph;
 use vello_common::kurbo::Affine;
 use vello_common::peniko::{Blob, Color, FontData};
 
@@ -30,8 +29,7 @@ struct AnimatedText {
     vx: f64,
     vy: f64,
     color: Color,
-    /// Pre-resolved glyph IDs and their x-offsets relative to the run origin.
-    glyphs: Vec<(u32, f32)>,
+    text: String,
     /// Total advance width of the run in pixels.
     run_width: f32,
 }
@@ -42,7 +40,6 @@ pub struct TextScene {
     speed: f64,
     font_size: f32,
     runs: Vec<AnimatedText>,
-    glyph_scratch: Vec<Glyph>,
     rng: Rng,
     last_time: f64,
     font_data: FontData,
@@ -65,7 +62,6 @@ impl TextScene {
             speed: 5.0,
             font_size: 24.0,
             runs: Vec::new(),
-            glyph_scratch: Vec::new(),
             rng: Rng::new(0xBAAD_F00D),
             last_time: 0.0,
             font_data: FontData::new(Blob::new(Arc::new(INCONSOLATA)), 0),
@@ -99,14 +95,14 @@ fn random_text_run(
     // Random length between 3 and 16 characters.
     let len = 3 + (rng.f64() * 14.0) as usize;
 
-    let mut glyphs = Vec::with_capacity(len);
+    let mut text = String::with_capacity(len);
     let mut pen_x: f32 = 0.0;
 
     for _ in 0..len {
         let ch = (ASCII_START + (rng.f64() * (ASCII_END - ASCII_START + 1) as f64) as u8) as char;
+        text.push(ch);
         let gid = charmap.map(ch).unwrap_or_default();
         let advance = glyph_metrics.advance_width(gid).unwrap_or_default();
-        glyphs.push((gid.to_u32(), pen_x));
         pen_x += advance;
     }
 
@@ -121,7 +117,7 @@ fn random_text_run(
         vx: (rng.f64() - 0.5) * 200.0,
         vy: (rng.f64() - 0.5) * 200.0,
         color: rng.color(220),
-        glyphs,
+        text,
         run_width,
     }
 }
@@ -193,7 +189,6 @@ impl BenchScene for TextScene {
         let dt = delta_time(&mut self.last_time, time, self.speed);
 
         backend.set_transform(view);
-        let glyph_scratch = &mut self.glyph_scratch;
 
         for run in &mut self.runs {
             run.x += run.vx * dt;
@@ -202,15 +197,14 @@ impl BenchScene for TextScene {
             bounce(&mut run.y, &mut run.vy, h);
 
             backend.set_paint(run.color.into());
-
-            glyph_scratch.clear();
-            glyph_scratch.extend(run.glyphs.iter().map(|&(id, x)| Glyph {
-                id,
-                x: x + run.x as f32,
-                y: run.y as f32,
-            }));
-
-            backend.fill_glyphs(&self.font_data, self.font_size, true, glyph_scratch);
+            backend.draw_text(
+                &self.font_data,
+                self.font_size,
+                true,
+                &run.text,
+                run.x as f32,
+                run.y as f32,
+            );
         }
     }
 }

@@ -12,6 +12,7 @@ use web_sys::{
     WebGlUniformLocation,
 };
 
+use crate::backend::layout_text_glyphs;
 use crate::scenes::{ParamId, SceneId};
 
 extern crate alloc;
@@ -244,6 +245,19 @@ impl BackendImpl {
             .font_size(font_size)
             .hint(hint)
             .fill_glyphs(glyphs.iter().copied());
+    }
+
+    pub fn draw_text(
+        &mut self,
+        font: &FontData,
+        font_size: f32,
+        hint: bool,
+        text: &str,
+        x: f32,
+        y: f32,
+    ) {
+        let glyphs = layout_text_glyphs(font, font_size, text, x, y);
+        self.fill_glyphs(font, font_size, hint, &glyphs);
     }
 
     pub fn draw_image(&mut self, _image: ImageSource, _rect: &Rect, _bilinear: bool) {}

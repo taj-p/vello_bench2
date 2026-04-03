@@ -3,15 +3,18 @@ use vello_common::filter::PreparedFilter;
 use vello_common::filter_effects::Filter;
 use vello_common::glyph::Glyph;
 use vello_common::kurbo::{Affine, BezPath, PathEl, Rect, Stroke};
-use vello_common::paint::{ImageSource, PaintType};
+use vello_common::paint::{ImageId, ImageSource, PaintType};
 use vello_common::peniko::color::Srgb;
 use vello_common::peniko::{
-    Fill, FontData, Gradient, GradientKind, LinearGradientPosition, RadialGradientPosition,
-    SweepGradientPosition,
+    Fill, FontData, Gradient, GradientKind, ImageQuality, LinearGradientPosition,
+    RadialGradientPosition, SweepGradientPosition,
 };
 use vello_common::pixmap::Pixmap;
-use wasm_bindgen::{JsCast, JsValue};
-use web_sys::{CanvasGradient, CanvasRenderingContext2d, CanvasWindingRule, HtmlCanvasElement};
+use wasm_bindgen::{Clamped, JsCast, JsValue};
+use web_sys::{
+    CanvasGradient, CanvasRenderingContext2d, CanvasWindingRule, HtmlCanvasElement, ImageData,
+    window,
+};
 
 use crate::scenes::{ParamId, SceneId};
 
@@ -23,6 +26,7 @@ pub fn supports_scene(scene_id: SceneId) -> bool {
             | SceneId::Polyline
             | SceneId::Svg
             | SceneId::Clip
+            | SceneId::Text
             | SceneId::FilterLayers
     )
 }
@@ -34,6 +38,9 @@ pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
             | (SceneId::Rect, ParamId::PaintMode)
             | (SceneId::Rect, ParamId::RectSize)
             | (SceneId::Rect, ParamId::Rotated)
+            | (SceneId::Rect, ParamId::ImageFilter)
+            | (SceneId::Rect, ParamId::ImageOpaque)
+            | (SceneId::Rect, ParamId::UseDrawImage)
             | (SceneId::Rect, ParamId::GradientShape)
             | (SceneId::Rect, ParamId::DynamicGradient)
             | (SceneId::Strokes, ParamId::NumStrokes)
@@ -47,6 +54,8 @@ pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
             | (SceneId::Clip, ParamId::RectSize)
             | (SceneId::Clip, ParamId::ClipMode)
             | (SceneId::Clip, ParamId::ClipMethod)
+            | (SceneId::Text, ParamId::NumRuns)
+            | (SceneId::Text, ParamId::FontSize)
             | (SceneId::FilterLayers, ParamId::NumRects)
             | (SceneId::FilterLayers, ParamId::RectSize)
             | (SceneId::FilterLayers, ParamId::FilterKind)
@@ -58,11 +67,8 @@ pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
     )
 }
 
-pub fn supports_param_value(scene_id: SceneId, param: ParamId, value: f64) -> bool {
-    !matches!(
-        (scene_id, param, value as u32),
-        (SceneId::Rect, ParamId::PaintMode, 2) | (SceneId::Rect, ParamId::GradientShape, 2)
-    )
+pub fn supports_param_value(_scene_id: SceneId, _param: ParamId, _value: f64) -> bool {
+    true
 }
 
 pub struct BackendImpl {
@@ -74,13 +80,27 @@ pub struct BackendImpl {
     current_transform: Affine,
     width: f64,
     height: f64,
+    uploaded_images: Vec<UploadedImage>,
 }
 
 #[derive(Clone)]
 enum PaintState {
     Solid([f32; 4]),
     Gradient(Gradient),
-    Unsupported,
+    Image(ImagePaint),
+}
+
+#[derive(Clone)]
+struct ImagePaint {
+    image: ImageSource,
+    quality: ImageQuality,
+    alpha: f32,
+}
+
+struct UploadedImage {
+    canvas: HtmlCanvasElement,
+    width: f64,
+    height: f64,
 }
 
 #[derive(Clone, Copy)]
@@ -112,6 +132,7 @@ impl BackendImpl {
             current_transform: Affine::IDENTITY,
             width: w as f64,
             height: h as f64,
+            uploaded_images: Vec::new(),
         };
         out.reset();
         out
@@ -154,15 +175,23 @@ impl BackendImpl {
         self.reset();
     }
 
-    pub fn upload_image(&mut self, _pixmap: Pixmap) -> ImageSource {
-        panic!("canvas2d image upload not implemented")
+    pub fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
+        let may_have_opacities = pixmap.may_have_opacities();
+        let uploaded = UploadedImage::from_pixmap(pixmap);
+        let id = ImageId::new(self.uploaded_images.len() as u32);
+        self.uploaded_images.push(uploaded);
+        ImageSource::opaque_id_with_opacity_hint(id, may_have_opacities)
     }
 
     pub fn set_paint(&mut self, paint: PaintType) {
         self.current_paint = match paint {
             PaintType::Solid(color) => PaintState::Solid(color.components),
             PaintType::Gradient(gradient) => PaintState::Gradient(gradient),
-            PaintType::Image(_) => PaintState::Unsupported,
+            PaintType::Image(image) => PaintState::Image(ImagePaint {
+                image: image.image,
+                quality: image.sampler.quality,
+                alpha: image.sampler.alpha,
+            }),
         };
     }
 
@@ -206,6 +235,9 @@ impl BackendImpl {
     }
 
     pub fn fill_rect(&mut self, rect: &Rect) {
+        if self.draw_current_image(rect) {
+            return;
+        }
         self.apply_fill_style();
         self.ctx
             .fill_rect(rect.x0, rect.y0, rect.width(), rect.height());
@@ -273,7 +305,70 @@ impl BackendImpl {
     ) {
     }
 
-    pub fn draw_image(&mut self, _image: ImageSource, _rect: &Rect, _bilinear: bool) {}
+    pub fn draw_text(
+        &mut self,
+        _font: &FontData,
+        font_size: f32,
+        _hint: bool,
+        text: &str,
+        x: f32,
+        y: f32,
+    ) {
+        self.apply_fill_style();
+        self.ctx.set_font(&format!("{font_size}px sans-serif"));
+        self.ctx.set_text_baseline("alphabetic");
+        let _ = self.ctx.fill_text(text, x as f64, y as f64);
+    }
+
+    pub fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool) {
+        let Some(uploaded) = self.resolve_image(&image) else {
+            return;
+        };
+        self.draw_uploaded_image(uploaded, rect, bilinear, 1.0);
+    }
+
+    fn draw_current_image(&self, rect: &Rect) -> bool {
+        let PaintState::Image(image) = &self.current_paint else {
+            return false;
+        };
+        let bilinear = !matches!(image.quality, ImageQuality::Low);
+        let Some(uploaded) = self.resolve_image(&image.image) else {
+            return false;
+        };
+        self.draw_uploaded_image(uploaded, rect, bilinear, image.alpha);
+        true
+    }
+
+    fn resolve_image(&self, image: &ImageSource) -> Option<&UploadedImage> {
+        match image {
+            ImageSource::OpaqueId { id, .. } => self.uploaded_images.get(id.as_u32() as usize),
+            ImageSource::Pixmap(_) => None,
+        }
+    }
+
+    fn draw_uploaded_image(&self, image: &UploadedImage, rect: &Rect, bilinear: bool, alpha: f32) {
+        self.ctx.set_image_smoothing_enabled(bilinear);
+        let prev_alpha = self.ctx.global_alpha();
+        if alpha != 1.0 {
+            self.ctx.set_global_alpha(prev_alpha * alpha as f64);
+        }
+        let _ = self
+            .ctx
+            .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
+                &image.canvas,
+                0.0,
+                0.0,
+                image.width,
+                image.height,
+                rect.x0,
+                rect.y0,
+                rect.width(),
+                rect.height(),
+            );
+        if alpha != 1.0 {
+            self.ctx.set_global_alpha(prev_alpha);
+        }
+    }
 
     fn apply_fill_style(&self) {
         match &self.current_paint {
@@ -283,7 +378,7 @@ impl BackendImpl {
                     self.ctx.set_fill_style_canvas_gradient(&canvas_gradient);
                 }
             }
-            PaintState::Unsupported => self.ctx.set_fill_style_str("rgba(0, 0, 0, 0)"),
+            PaintState::Image(_) => self.ctx.set_fill_style_str("rgba(0, 0, 0, 0)"),
         }
     }
 
@@ -295,7 +390,42 @@ impl BackendImpl {
                     self.ctx.set_stroke_style_canvas_gradient(&canvas_gradient);
                 }
             }
-            PaintState::Unsupported => self.ctx.set_stroke_style_str("rgba(0, 0, 0, 0)"),
+            PaintState::Image(_) => self.ctx.set_stroke_style_str("rgba(0, 0, 0, 0)"),
+        }
+    }
+}
+
+impl UploadedImage {
+    fn from_pixmap(pixmap: Pixmap) -> Self {
+        let width = pixmap.width();
+        let height = pixmap.height();
+        let data = pixmap
+            .take_unpremultiplied()
+            .into_iter()
+            .flat_map(|rgba| [rgba.r, rgba.g, rgba.b, rgba.a])
+            .collect::<Vec<_>>();
+        let image_data =
+            ImageData::new_with_u8_clamped_array_and_sh(Clamped(&data), width as u32, height as u32)
+                .unwrap();
+        let document = window().unwrap().document().unwrap();
+        let canvas: HtmlCanvasElement = document
+            .create_element("canvas")
+            .unwrap()
+            .dyn_into()
+            .unwrap();
+        canvas.set_width(width as u32);
+        canvas.set_height(height as u32);
+        let ctx: CanvasRenderingContext2d = canvas
+            .get_context("2d")
+            .unwrap()
+            .unwrap()
+            .dyn_into()
+            .unwrap();
+        ctx.put_image_data(&image_data, 0.0, 0.0).unwrap();
+        Self {
+            canvas,
+            width: width as f64,
+            height: height as f64,
         }
     }
 }

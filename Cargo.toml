@@ -24,6 +24,7 @@ vello_hybrid = { git = "https://github.com/linebender/vello", rev = "c08ba6e1", 
 vello_cpu = { git = "https://github.com/linebender/vello", rev = "c08ba6e1", features = ["text"] }
 pathfinder_canvas = { git = "https://github.com/servo/pathfinder", branch = "main" }
 pathfinder_color = { git = "https://github.com/servo/pathfinder", branch = "main" }
+pathfinder_content = { git = "https://github.com/servo/pathfinder", branch = "main" }
 pathfinder_geometry = { git = "https://github.com/servo/pathfinder", branch = "main" }
 pathfinder_renderer = { git = "https://github.com/servo/pathfinder", branch = "main" }
 pathfinder_resources = { git = "https://github.com/servo/pathfinder", branch = "main" }
