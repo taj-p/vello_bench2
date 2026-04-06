@@ -242,6 +242,8 @@ pub struct Ui {
     save_name_input: HtmlInputElement,
     /// Save button.
     pub save_btn: HtmlElement,
+    /// Load report dropdown (populates rows from a saved report).
+    pub load_select: HtmlSelectElement,
     /// Compare dropdown.
     pub compare_select: HtmlSelectElement,
     /// Delete button for saved reports.
@@ -386,6 +388,7 @@ impl Ui {
             vp_height_input: cfg.vp_height_input,
             save_name_input: cfg.save_name_input,
             save_btn: cfg.save_btn,
+            load_select: cfg.load_select,
             compare_select: cfg.compare_select,
             delete_btn: cfg.delete_btn,
             compare_report: None,
@@ -872,17 +875,31 @@ impl Ui {
         self.refresh_compare_dropdown();
     }
 
-    /// Refresh the compare dropdown with current saved reports.
+    /// Refresh both the load and compare dropdowns with current saved reports.
     pub fn refresh_compare_dropdown(&self) {
-        // Clear existing options.
-        self.compare_select.set_inner_html("");
         let d = doc();
+        let saved = crate::storage::load_reports();
+
+        // Refresh load dropdown.
+        self.load_select.set_inner_html("");
+        let load_none = d.create_element("option").unwrap();
+        load_none.set_text_content(Some("(latest run)"));
+        load_none.set_attribute("value", "").unwrap();
+        self.load_select.append_child(&load_none).unwrap();
+        for (i, r) in saved.reports.iter().enumerate() {
+            let opt = d.create_element("option").unwrap();
+            let lbl = format!("{} ({}x{})", r.label, r.viewport_width, r.viewport_height);
+            opt.set_text_content(Some(&lbl));
+            opt.set_attribute("value", &i.to_string()).unwrap();
+            self.load_select.append_child(&opt).unwrap();
+        }
+
+        // Refresh compare dropdown.
+        self.compare_select.set_inner_html("");
         let none_opt = d.create_element("option").unwrap();
         none_opt.set_text_content(Some("(none)"));
         none_opt.set_attribute("value", "").unwrap();
         self.compare_select.append_child(&none_opt).unwrap();
-
-        let saved = crate::storage::load_reports();
         for (i, r) in saved.reports.iter().enumerate() {
             let opt = d.create_element("option").unwrap();
             let lbl = format!("{} ({}x{})", r.label, r.viewport_width, r.viewport_height);
@@ -890,6 +907,39 @@ impl Ui {
             opt.set_attribute("value", &i.to_string()).unwrap();
             self.compare_select.append_child(&opt).unwrap();
         }
+    }
+
+    /// Load a saved report's results into the bench rows.
+    pub fn load_report_into_rows(&self) {
+        let val = self.load_select.value();
+        if val.is_empty() {
+            return;
+        }
+        let idx: usize = match val.parse() {
+            Ok(i) => i,
+            Err(_) => return,
+        };
+        let store = crate::storage::load_reports();
+        let Some(report) = store.reports.get(idx) else {
+            return;
+        };
+        for br in &self.bench_rows {
+            if let Some(saved) = report.results.iter().find(|r| r.name == br.name) {
+                let text = format!("{:.2} ms/f  ({} iters)", saved.ms_per_frame, saved.iterations);
+                br.result_text.set_text_content(Some(&text));
+                br.result_line
+                    .style()
+                    .set_property("display", "flex")
+                    .unwrap();
+            } else {
+                br.result_text.set_text_content(Some(""));
+                br.result_line
+                    .style()
+                    .set_property("display", "none")
+                    .unwrap();
+            }
+        }
+        self.show_deltas();
     }
 
     /// Load a comparison report by index, or clear if empty.
@@ -971,6 +1021,11 @@ impl Ui {
     /// Save button ref.
     pub fn save_btn(&self) -> &HtmlElement {
         &self.save_btn
+    }
+
+    /// Load report select ref.
+    pub fn load_select(&self) -> &HtmlSelectElement {
+        &self.load_select
     }
 
     /// Compare select ref.
@@ -1178,6 +1233,7 @@ struct BenchConfigParts {
     vp_height_input: HtmlInputElement,
     save_name_input: HtmlInputElement,
     save_btn: HtmlElement,
+    load_select: HtmlSelectElement,
     compare_select: HtmlSelectElement,
     delete_btn: HtmlElement,
     screenshot_img: HtmlImageElement,
@@ -1717,6 +1773,44 @@ fn build_bench_config(document: &Document, vp_w: u32, vp_h: u32) -> BenchConfigP
     );
     left_col.append_child(&save_btn).unwrap();
 
+    let load_label = div(document);
+    load_label.set_text_content(Some("Load report"));
+    set(
+        &load_label,
+        &[
+            ("color", "#9399b2"),
+            ("font-size", "11px"),
+            ("margin-bottom", "4px"),
+        ],
+    );
+    left_col.append_child(&load_label).unwrap();
+
+    let load_select: HtmlSelectElement = document
+        .create_element("select")
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    select_style(&load_select);
+    load_select
+        .style()
+        .set_property("margin-bottom", "8px")
+        .unwrap();
+    {
+        let opt = document.create_element("option").unwrap();
+        opt.set_text_content(Some("(latest run)"));
+        opt.set_attribute("value", "").unwrap();
+        load_select.append_child(&opt).unwrap();
+    }
+    let saved = crate::storage::load_reports();
+    for (i, r) in saved.reports.iter().enumerate() {
+        let opt = document.create_element("option").unwrap();
+        let label = format!("{} ({}x{})", r.label, r.viewport_width, r.viewport_height);
+        opt.set_text_content(Some(&label));
+        opt.set_attribute("value", &i.to_string()).unwrap();
+        load_select.append_child(&opt).unwrap();
+    }
+    left_col.append_child(&load_select).unwrap();
+
     let compare_label = div(document);
     compare_label.set_text_content(Some("Compare with"));
     set(
@@ -1745,7 +1839,6 @@ fn build_bench_config(document: &Document, vp_w: u32, vp_h: u32) -> BenchConfigP
         opt.set_attribute("value", "").unwrap();
         compare_select.append_child(&opt).unwrap();
     }
-    let saved = crate::storage::load_reports();
     for (i, r) in saved.reports.iter().enumerate() {
         let opt = document.create_element("option").unwrap();
         let label = format!("{} ({}x{})", r.label, r.viewport_width, r.viewport_height);
@@ -1796,6 +1889,7 @@ fn build_bench_config(document: &Document, vp_w: u32, vp_h: u32) -> BenchConfigP
         vp_height_input,
         save_name_input,
         save_btn,
+        load_select,
         compare_select,
         delete_btn,
         screenshot_img,
