@@ -164,6 +164,10 @@ pub struct RectScene {
     image_sources: Vec<ImageSource>,
     /// Tracks what opacity mode images were generated with.
     images_were_opaque: bool,
+    /// When > 0, overrides `rect_size` at render time to maintain this
+    /// average per-pixel overlap ratio regardless of viewport dimensions
+    /// and rect count. rect_size = sqrt(target * viewport_area / num_rects).
+    target_overlap: f64,
 }
 
 impl RectScene {
@@ -187,6 +191,7 @@ impl RectScene {
             frame: 0,
             image_sources: Vec::new(),
             images_were_opaque: false,
+            target_overlap: 0.0,
         }
     }
 
@@ -394,6 +399,7 @@ impl BenchScene for RectScene {
                     self.rects.clear();
                 }
             }
+            ParamId::TargetOverlap => self.target_overlap = value,
             _ => {}
         }
     }
@@ -423,7 +429,17 @@ impl BenchScene for RectScene {
         let frame = self.frame;
         self.frame += 1;
 
-        let size = self.rect_size;
+        let size = if self.target_overlap > 0.0 && self.num_rects > 0 {
+            // Derive rect size from viewport area and rect count to maintain
+            // a constant average per-pixel overlap ratio:
+            //   overlap = num_rects * size² / (w * h)
+            //   size = sqrt(overlap * w * h / num_rects)
+            (self.target_overlap * w * h / self.num_rects as f64)
+                .sqrt()
+                .max(1.0)
+        } else {
+            self.rect_size
+        };
         let half = size / 2.0;
 
         backend.set_transform(view);

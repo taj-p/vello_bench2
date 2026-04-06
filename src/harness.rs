@@ -316,6 +316,45 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::Opaque, 0.0),
             ],
         },
+        // ── Rects (alpha, low overdraw) ──────────────────────────────
+        // TargetOverlap keeps the average per-pixel overlap ratio constant
+        // as NumRects scales with preset: rect size shrinks to compensate.
+        // Low overlap means dest.a never fully saturates. This has been found to
+        // have a large impact on pipeline architecture.
+        BenchDef {
+            name: "Rect - 2x Overlap",
+            description: "alpha rects, ~2x avg per-pixel overlap — rect size adapts to viewport",
+            category: "Rects (alpha, low overdraw)",
+            scene_id: SceneId::Rect,
+            scale: Some(BenchScale {
+                param: ParamId::NumRects,
+                calibrated_value: 380_000,
+            }),
+            params: &[
+                (ParamId::NumRects, 380_000.0),
+                (ParamId::PaintMode, 0.0),
+                (ParamId::Rotated, 0.0),
+                (ParamId::Opaque, 0.0),
+                (ParamId::TargetOverlap, 2.0),
+            ],
+        },
+        BenchDef {
+            name: "Rect - 4x Overlap",
+            description: "alpha rects, ~4x avg per-pixel overlap — rect size adapts to viewport",
+            category: "Rects (alpha, low overdraw)",
+            scene_id: SceneId::Rect,
+            scale: Some(BenchScale {
+                param: ParamId::NumRects,
+                calibrated_value: 380_000,
+            }),
+            params: &[
+                (ParamId::NumRects, 380_000.0),
+                (ParamId::PaintMode, 0.0),
+                (ParamId::Rotated, 0.0),
+                (ParamId::Opaque, 0.0),
+                (ParamId::TargetOverlap, 4.0),
+            ],
+        },
         // ── Rects (opaque) ─────────────────────────────────────────────
         BenchDef {
             name: "Rect - 5×5 - Solid (opaque)",
