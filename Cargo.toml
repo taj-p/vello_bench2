@@ -19,9 +19,9 @@ serde_json = { version = "1.0.149" }
 smallvec = {version = "1.15.1" }
 skrifa = { version = "0.40.0" }
 usvg = { version = "0.45.1" }
-vello_common = { git = "https://github.com/linebender/vello", rev = "c08ba6e1" }
-vello_hybrid = { git = "https://github.com/linebender/vello", rev = "c08ba6e1", features = ["webgl", "text"] }
-vello_cpu = { git = "https://github.com/linebender/vello", rev = "c08ba6e1", features = ["text"] }
+vello_common = { git = "https://github.com/linebender/vello", rev = "246912ae692cff7719cd95026107cc1aa077f205" }
+vello_hybrid = { git = "https://github.com/linebender/vello", rev = "246912ae692cff7719cd95026107cc1aa077f205", features = ["webgl", "text"] }
+vello_cpu = { git = "https://github.com/linebender/vello", rev = "246912ae692cff7719cd95026107cc1aa077f205", features = ["text"] }
 pathfinder_canvas = { git = "https://github.com/servo/pathfinder", branch = "main" }
 pathfinder_color = { git = "https://github.com/servo/pathfinder", branch = "main" }
 pathfinder_content = { git = "https://github.com/servo/pathfinder", branch = "main" }
@@ -61,6 +61,7 @@ web-sys = { version = "0.3.83", features = [
     "WheelEvent",
     "AddEventListenerOptions",
     "EventTarget",
+    "MessageEvent",
     "Node",
     "TouchEvent",
     "TouchList",
