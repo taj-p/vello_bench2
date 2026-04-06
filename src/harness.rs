@@ -444,6 +444,45 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::ImageOpaque, 0.0),
             ],
         },
+        // ── Images (alpha, low overdraw) ──────────────────────────────
+        // Image rects with alpha go entirely through the alpha pass (atlas
+        // textures have transparency).
+        BenchDef {
+            name: "Image - 2x Overlap - Nearest",
+            description: "alpha images, ~2x avg overlap, NN sampling — rect size adapts to viewport",
+            category: "Images (alpha, low overdraw)",
+            scene_id: SceneId::Rect,
+            scale: Some(BenchScale {
+                param: ParamId::NumRects,
+                calibrated_value: 30_000,
+            }),
+            params: &[
+                (ParamId::NumRects, 30_000.0),
+                (ParamId::PaintMode, 2.0),
+                (ParamId::Rotated, 0.0),
+                (ParamId::ImageFilter, 0.0),
+                (ParamId::ImageOpaque, 0.0),
+                (ParamId::TargetOverlap, 2.0),
+            ],
+        },
+        BenchDef {
+            name: "Image - 4x Overlap - Nearest",
+            description: "alpha images, ~4x avg overlap, NN sampling — rect size adapts to viewport",
+            category: "Images (alpha, low overdraw)",
+            scene_id: SceneId::Rect,
+            scale: Some(BenchScale {
+                param: ParamId::NumRects,
+                calibrated_value: 30_000,
+            }),
+            params: &[
+                (ParamId::NumRects, 30_000.0),
+                (ParamId::PaintMode, 2.0),
+                (ParamId::Rotated, 0.0),
+                (ParamId::ImageFilter, 0.0),
+                (ParamId::ImageOpaque, 0.0),
+                (ParamId::TargetOverlap, 4.0),
+            ],
+        },
         // ── Images (opaque) ────────────────────────────────────────────
         BenchDef {
             name: "Rect - 200×200 - Opaque Image - Nearest",
