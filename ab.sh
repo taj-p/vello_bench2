@@ -3,8 +3,9 @@
 # A/B benchmark: build both the pinned ("control") and a local ("treatment")
 # version of Vello, then serve them side-by-side with a one-click toggle.
 #
-#   ./ab.sh ~/repos/vello            # build & serve
-#   ./ab.sh ~/repos/vello --global   # bind to 0.0.0.0
+#   ./ab.sh ~/repos/vello                      # build & serve
+#   ./ab.sh ~/repos/vello --rev abc123         # override control git rev
+#   ./ab.sh ~/repos/vello --global             # bind to 0.0.0.0
 #
 set -euo pipefail
 
@@ -16,23 +17,30 @@ RUSTFLAGS_SIMD="-Ctarget-feature=+simd128"
 
 VELLO_PATH=""
 BIND_ADDR="127.0.0.1"
+CONTROL_REV=""
 
-for arg in "$@"; do
-  case "$arg" in
-    --global) BIND_ADDR="0.0.0.0" ;;
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --global) BIND_ADDR="0.0.0.0"; shift ;;
+    --rev)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --rev requires a value" >&2; exit 1
+      fi
+      CONTROL_REV="$2"; shift 2 ;;
+    --rev=*) CONTROL_REV="${1#--rev=}"; shift ;;
     *)
       if [[ -z "$VELLO_PATH" ]]; then
-        VELLO_PATH="$arg"
+        VELLO_PATH="$1"
       else
-        echo "Error: unexpected argument '$arg'" >&2
+        echo "Error: unexpected argument '$1'" >&2
         exit 1
       fi
-      ;;
+      shift ;;
   esac
 done
 
 if [[ -z "$VELLO_PATH" ]]; then
-  echo "Usage: $0 <path-to-local-vello> [--global]" >&2
+  echo "Usage: $0 <path-to-local-vello> [--rev <git-rev>] [--global]" >&2
   exit 1
 fi
 
@@ -100,7 +108,17 @@ build_variant() {
 # Remove stale serve.sh directories so index.html detects ab.sh mode correctly.
 rm -rf "$DIST/simd" "$DIST/nosimd"
 
-# ── Build control (current Cargo.toml, pinned git rev) ───────────────────────
+# ── Optionally override the control git rev ───────────────────────────────────
+
+if [[ -n "$CONTROL_REV" ]]; then
+  echo "==> Overriding control rev to $CONTROL_REV"
+  sed -i.bak -E \
+    "s|(git = \"https://github.com/linebender/vello\", rev = \")([^\"]+)(\")|\1${CONTROL_REV}\3|g" \
+    Cargo.toml
+  rm -f Cargo.toml.bak
+fi
+
+# ── Build control ─────────────────────────────────────────────────────────────
 
 build_variant control
 
@@ -161,5 +179,5 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         super().end_headers()
 
-http.server.HTTPServer(('$BIND_ADDR', 8080), Handler).serve_forever()
+http.server.ThreadingHTTPServer(('$BIND_ADDR', 8080), Handler).serve_forever()
 "

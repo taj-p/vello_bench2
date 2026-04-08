@@ -47,6 +47,8 @@ should_build nosimd && build_variant ""                          nosimd
 
 cp web/index.html "$DIST/index.html"
 
+# ── Serve ─────────────────────────────────────────────────────────────────────
+
 echo "==> Serving at http://localhost:8080"
 if [[ "$BIND_ADDR" == "0.0.0.0" ]]; then
   LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "<your-ip>")
@@ -64,5 +66,5 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         super().end_headers()
 
-http.server.HTTPServer(('$BIND_ADDR', 8080), Handler).serve_forever()
+http.server.ThreadingHTTPServer(('$BIND_ADDR', 8080), Handler).serve_forever()
 "

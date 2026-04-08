@@ -53,14 +53,17 @@ This:
 Run benchmarks on one variant, click the toggle, run them again -- deltas against
 the other variant appear automatically.
 
+Use `--rev` to override the control's git revision without editing `Cargo.toml`:
+
+```
+./ab.sh ~/repos/vello --rev abc123def
+```
+
 Use `--global` to bind to `0.0.0.0` (useful for testing on a tablet over the local network):
 
 ```
-./ab.sh ~/repos/vello --global
+./ab.sh ~/repos/vello --rev abc123def --global
 ```
 
 A/B mode always builds with SIMD enabled (the SIMD toggle is hidden). Use
 `serve.sh` if you need to compare SIMD vs non-SIMD.
-
-NOTE: Remember to pin your `Cargo.toml` version to the "best" control. I.e., if your treatment branch bases
-off commit XYZ, then the control should be commit XYZ.
