@@ -58,6 +58,7 @@ pub enum ParamId {
     ShadowDy,
     ShadowAlpha,
     Opaque,
+    TargetOverlap,
 }
 
 impl ParamId {
@@ -90,6 +91,7 @@ impl ParamId {
             Self::ShadowDy => "shadow_dy",
             Self::ShadowAlpha => "shadow_alpha",
             Self::Opaque => "opaque",
+            Self::TargetOverlap => "target_overlap",
         }
     }
 }
