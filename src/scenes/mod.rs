@@ -57,6 +57,7 @@ pub enum ParamId {
     ShadowDx,
     ShadowDy,
     ShadowAlpha,
+    Opaque,
 }
 
 impl ParamId {
@@ -88,6 +89,7 @@ impl ParamId {
             Self::ShadowDx => "shadow_dx",
             Self::ShadowDy => "shadow_dy",
             Self::ShadowAlpha => "shadow_alpha",
+            Self::Opaque => "opaque",
         }
     }
 }

@@ -44,6 +44,8 @@ pub struct StrokesScene {
     /// Number of segments per stroke path.
     segments: usize,
     speed: f64,
+    /// When true, stroke colors use alpha 255 instead of 150.
+    opaque: bool,
     strokes: Vec<AnimatedStroke>,
     rng: Rng,
     last_time: f64,
@@ -61,6 +63,7 @@ impl StrokesScene {
             curve_type: 0,
             segments: 1,
             speed: 5.0,
+            opaque: false,
             strokes: Vec::new(),
             rng: Rng::new(0xBEEF_CAFE),
             last_time: 0.0,
@@ -86,9 +89,10 @@ impl StrokesScene {
         if self.strokes.len() < self.num_strokes {
             let pts_per_seg = points_per_segment(self.curve_type);
             let total_pts = 1 + self.segments * pts_per_seg;
+            let alpha = if self.opaque { 255 } else { 150 };
             while self.strokes.len() < self.num_strokes {
                 self.strokes
-                    .push(random_stroke(&mut self.rng, w, h, total_pts));
+                    .push(random_stroke(&mut self.rng, w, h, total_pts, alpha));
             }
         } else if self.strokes.len() > self.num_strokes {
             self.strokes.truncate(self.num_strokes);
@@ -126,7 +130,7 @@ fn random_offset_near(rng: &mut Rng, prev: &OffsetPoint) -> OffsetPoint {
     }
 }
 
-fn random_stroke(rng: &mut Rng, w: f64, h: f64, total_pts: usize) -> AnimatedStroke {
+fn random_stroke(rng: &mut Rng, w: f64, h: f64, total_pts: usize, alpha: u8) -> AnimatedStroke {
     let x = rng.f64() * w;
     let y = rng.f64() * h;
     let vx = (rng.f64() - 0.5) * 200.0;
@@ -144,7 +148,7 @@ fn random_stroke(rng: &mut Rng, w: f64, h: f64, total_pts: usize) -> AnimatedStr
         vx,
         vy,
         offsets,
-        color: rng.color(150),
+        color: rng.color(alpha),
     }
 }
 
@@ -218,6 +222,12 @@ impl BenchScene for StrokesScene {
                 kind: ParamKind::Select(vec![("Butt", 0.0), ("Square", 1.0), ("Round", 2.0)]),
                 value: self.cap as f64,
             },
+            Param {
+                id: ParamId::Opaque,
+                label: "Opaque",
+                kind: ParamKind::Select(vec![("No", 0.0), ("Yes", 1.0)]),
+                value: if self.opaque { 1.0 } else { 0.0 },
+            },
         ]
     }
 
@@ -228,6 +238,13 @@ impl BenchScene for StrokesScene {
             ParamId::Segments => self.segments = (value as usize).max(1),
             ParamId::StrokeWidth => self.stroke_width = value,
             ParamId::Cap => self.cap = value as u32,
+            ParamId::Opaque => {
+                let new_val = value >= 0.5;
+                if new_val != self.opaque {
+                    self.opaque = new_val;
+                    self.strokes.clear();
+                }
+            }
             _ => {}
         }
     }

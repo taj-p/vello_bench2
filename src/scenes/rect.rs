@@ -150,6 +150,8 @@ pub struct RectScene {
     image_opaque: bool,
     /// Use `draw_image` API instead of image paint (hybrid GPU fast path).
     use_draw_image: bool,
+    /// When true, fill colors use alpha 255 instead of semi-transparent.
+    opaque: bool,
     /// When true, gradient colors and positions animate every frame.
     dynamic_gradient: bool,
     /// 0 = linear, 1 = radial, 2 = sweep
@@ -176,6 +178,7 @@ impl RectScene {
             image_filter: 0,
             image_opaque: false,
             use_draw_image: false,
+            opaque: false,
             dynamic_gradient: false,
             gradient_shape: 0,
             rects: Vec::new(),
@@ -189,10 +192,11 @@ impl RectScene {
 
     /// Grow or shrink the rect list to match `self.num_rects`, preserving existing rects.
     fn resize_rects(&mut self, w: f64, h: f64) {
+        let alpha = if self.opaque { 255 } else { 200 };
         if self.rects.len() < self.num_rects {
             self.rects.reserve(self.num_rects - self.rects.len());
             while self.rects.len() < self.num_rects {
-                let r = random_rect(&mut self.rng, w, h);
+                let r = random_rect(&mut self.rng, w, h, alpha);
                 self.rects.push(r);
             }
         } else {
@@ -276,14 +280,14 @@ impl RectScene {
     }
 }
 
-fn random_rect(rng: &mut Rng, w: f64, h: f64) -> AnimatedRect {
+fn random_rect(rng: &mut Rng, w: f64, h: f64, alpha: u8) -> AnimatedRect {
     AnimatedRect {
         x: rng.f64() * w,
         y: rng.f64() * h,
         vx: (rng.f64() - 0.5) * 200.0,
         vy: (rng.f64() - 0.5) * 200.0,
-        color: rng.color(200),
-        color2: rng.color(200),
+        color: rng.color(alpha),
+        color2: rng.color(alpha),
         grad_anim: GradientAnim::generate(rng),
         image_idx: (rng.f64() * NUM_IMAGES as f64) as usize % NUM_IMAGES,
         angle: (rng.f64() - 0.5) * std::f64::consts::TAU,
@@ -363,6 +367,12 @@ impl BenchScene for RectScene {
                 kind: ParamKind::Select(vec![("No", 0.0), ("Yes", 1.0)]),
                 value: if self.use_draw_image { 1.0 } else { 0.0 },
             },
+            Param {
+                id: ParamId::Opaque,
+                label: "Opaque",
+                kind: ParamKind::Select(vec![("No", 0.0), ("Yes", 1.0)]),
+                value: if self.opaque { 1.0 } else { 0.0 },
+            },
         ]
     }
 
@@ -377,6 +387,13 @@ impl BenchScene for RectScene {
             ParamId::ImageFilter => self.image_filter = value as u32,
             ParamId::ImageOpaque => self.image_opaque = value >= 0.5,
             ParamId::UseDrawImage => self.use_draw_image = value >= 0.5,
+            ParamId::Opaque => {
+                let new_val = value >= 0.5;
+                if new_val != self.opaque {
+                    self.opaque = new_val;
+                    self.rects.clear();
+                }
+            }
             _ => {}
         }
     }

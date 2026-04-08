@@ -264,10 +264,11 @@ fn render_one(
 /// All predefined benchmarks.
 pub(crate) fn bench_defs() -> Vec<BenchDef> {
     vec![
+        // ── Rects (alpha) ──────────────────────────────────────────────
         BenchDef {
             name: "Rect - 5×5 - Solid",
-            description: "rendering small rectangles",
-            category: "Rectangles",
+            description: "rendering small semi-transparent rectangles",
+            category: "Rects (alpha)",
             scene_id: SceneId::Rect,
             scale: Some(BenchScale {
                 param: ParamId::NumRects,
@@ -278,12 +279,13 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::RectSize, 5.0),
                 (ParamId::PaintMode, 0.0),
                 (ParamId::Rotated, 0.0),
+                (ParamId::Opaque, 0.0),
             ],
         },
         BenchDef {
             name: "Rect - 50×50 - Solid",
-            description: "rendering medium-sized rectangles",
-            category: "Rectangles",
+            description: "rendering medium semi-transparent rectangles",
+            category: "Rects (alpha)",
             scene_id: SceneId::Rect,
             scale: Some(BenchScale {
                 param: ParamId::NumRects,
@@ -294,12 +296,13 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::RectSize, 50.0),
                 (ParamId::PaintMode, 0.0),
                 (ParamId::Rotated, 0.0),
+                (ParamId::Opaque, 0.0),
             ],
         },
         BenchDef {
             name: "Rect - 200×200 - Solid",
-            description: "rendering large rectangles",
-            category: "Rectangles",
+            description: "rendering large semi-transparent rectangles",
+            category: "Rects (alpha)",
             scene_id: SceneId::Rect,
             scale: Some(BenchScale {
                 param: ParamId::NumRects,
@@ -310,12 +313,66 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::RectSize, 200.0),
                 (ParamId::PaintMode, 0.0),
                 (ParamId::Rotated, 0.0),
+                (ParamId::Opaque, 0.0),
+            ],
+        },
+        // ── Rects (opaque) ─────────────────────────────────────────────
+        BenchDef {
+            name: "Rect - 5×5 - Solid (opaque)",
+            description: "rendering small fully opaque rectangles",
+            category: "Rects (opaque)",
+            scene_id: SceneId::Rect,
+            scale: Some(BenchScale {
+                param: ParamId::NumRects,
+                calibrated_value: 600_000,
+            }),
+            params: &[
+                (ParamId::NumRects, 600_000.0),
+                (ParamId::RectSize, 5.0),
+                (ParamId::PaintMode, 0.0),
+                (ParamId::Rotated, 0.0),
+                (ParamId::Opaque, 1.0),
             ],
         },
         BenchDef {
+            name: "Rect - 50×50 - Solid (opaque)",
+            description: "rendering medium fully opaque rectangles",
+            category: "Rects (opaque)",
+            scene_id: SceneId::Rect,
+            scale: Some(BenchScale {
+                param: ParamId::NumRects,
+                calibrated_value: 380_000,
+            }),
+            params: &[
+                (ParamId::NumRects, 380_000.0),
+                (ParamId::RectSize, 50.0),
+                (ParamId::PaintMode, 0.0),
+                (ParamId::Rotated, 0.0),
+                (ParamId::Opaque, 1.0),
+            ],
+        },
+        BenchDef {
+            name: "Rect - 200×200 - Solid (opaque)",
+            description: "rendering large fully opaque rectangles",
+            category: "Rects (opaque)",
+            scene_id: SceneId::Rect,
+            scale: Some(BenchScale {
+                param: ParamId::NumRects,
+                calibrated_value: 53_000,
+            }),
+            params: &[
+                (ParamId::NumRects, 53_000.0),
+                (ParamId::RectSize, 200.0),
+                (ParamId::PaintMode, 0.0),
+                (ParamId::Rotated, 0.0),
+                (ParamId::Opaque, 1.0),
+            ],
+        },
+        // ── Images (alpha) ─────────────────────────────────────────────
+        BenchDef {
             name: "Rect - 200×200 - Image - Nearest",
             description: "rendering transparent images with NN sampling",
-            category: "Images",
+            category: "Images (alpha)",
             scene_id: SceneId::Rect,
             scale: Some(BenchScale {
                 param: ParamId::NumRects,
@@ -333,7 +390,7 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
         BenchDef {
             name: "Rect - 200×200 - Image - Bilinear",
             description: "rendering transparent images with bilinear sampling",
-            category: "Images",
+            category: "Images (alpha)",
             scene_id: SceneId::Rect,
             scale: Some(BenchScale {
                 param: ParamId::NumRects,
@@ -348,10 +405,11 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::ImageOpaque, 0.0),
             ],
         },
+        // ── Images (opaque) ────────────────────────────────────────────
         BenchDef {
             name: "Rect - 200×200 - Opaque Image - Nearest",
             description: "rendering opaque images with NN sampling",
-            category: "Images",
+            category: "Images (opaque)",
             scene_id: SceneId::Rect,
             scale: Some(BenchScale {
                 param: ParamId::NumRects,
@@ -369,7 +427,7 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
         BenchDef {
             name: "Rect - 200×200 - Opaque Image - Bilinear",
             description: "rendering opaque images with bilinear sampling",
-            category: "Images",
+            category: "Images (opaque)",
             scene_id: SceneId::Rect,
             scale: Some(BenchScale {
                 param: ParamId::NumRects,
@@ -384,48 +442,49 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::ImageOpaque, 1.0),
             ],
         },
-        BenchDef {
-            name: "Rect - 200×200 - Opaque Image (draw_image) - Nearest",
-            description: "rendering images via draw_image API (GPU fast path on hybrid)",
-            category: "Images",
-            scene_id: SceneId::Rect,
-            scale: Some(BenchScale {
-                param: ParamId::NumRects,
-                calibrated_value: 35_000,
-            }),
-            params: &[
-                (ParamId::NumRects, 35_000.0),
-                (ParamId::RectSize, 200.0),
-                (ParamId::PaintMode, 2.0),
-                (ParamId::Rotated, 0.0),
-                (ParamId::ImageFilter, 0.0),
-                (ParamId::ImageOpaque, 1.0),
-                (ParamId::UseDrawImage, 1.0),
-            ],
-        },
-        BenchDef {
-            name: "Rect - 200×200 - Opaque Image (draw_image) - Bilinear",
-            description: "rendering images via draw_image API with bilinear (GPU fast path on hybrid)",
-            category: "Images",
-            scene_id: SceneId::Rect,
-            scale: Some(BenchScale {
-                param: ParamId::NumRects,
-                calibrated_value: 34_000,
-            }),
-            params: &[
-                (ParamId::NumRects, 34_000.0),
-                (ParamId::RectSize, 200.0),
-                (ParamId::PaintMode, 2.0),
-                (ParamId::Rotated, 0.0),
-                (ParamId::ImageFilter, 1.0),
-                (ParamId::ImageOpaque, 1.0),
-                (ParamId::UseDrawImage, 1.0),
-            ],
-        },
+        // BenchDef {
+        //     name: "Rect - 200×200 - Opaque Image (draw_image) - Nearest",
+        //     description: "rendering images via draw_image API (GPU fast path on hybrid)",
+        //     category: "Images (opaque)",
+        //     scene_id: SceneId::Rect,
+        //     scale: Some(BenchScale {
+        //         param: ParamId::NumRects,
+        //         calibrated_value: 35_000,
+        //     }),
+        //     params: &[
+        //         (ParamId::NumRects, 35_000.0),
+        //         (ParamId::RectSize, 200.0),
+        //         (ParamId::PaintMode, 2.0),
+        //         (ParamId::Rotated, 0.0),
+        //         (ParamId::ImageFilter, 0.0),
+        //         (ParamId::ImageOpaque, 1.0),
+        //         (ParamId::UseDrawImage, 1.0),
+        //     ],
+        // },
+        // BenchDef {
+        //     name: "Rect - 200×200 - Opaque Image (draw_image) - Bilinear",
+        //     description: "rendering images via draw_image API with bilinear (GPU fast path on hybrid)",
+        //     category: "Images (opaque)",
+        //     scene_id: SceneId::Rect,
+        //     scale: Some(BenchScale {
+        //         param: ParamId::NumRects,
+        //         calibrated_value: 34_000,
+        //     }),
+        //     params: &[
+        //         (ParamId::NumRects, 34_000.0),
+        //         (ParamId::RectSize, 200.0),
+        //         (ParamId::PaintMode, 2.0),
+        //         (ParamId::Rotated, 0.0),
+        //         (ParamId::ImageFilter, 1.0),
+        //         (ParamId::ImageOpaque, 1.0),
+        //         (ParamId::UseDrawImage, 1.0),
+        //     ],
+        // },
+        // ── Strokes (alpha) ────────────────────────────────────────────
         BenchDef {
             name: "Stroked Lines - 3px",
-            description: "rendering lines with small stroke width",
-            category: "Strokes",
+            description: "rendering semi-transparent lines with small stroke width",
+            category: "Strokes (alpha)",
             scene_id: SceneId::Strokes,
             scale: Some(BenchScale {
                 param: ParamId::NumStrokes,
@@ -435,12 +494,13 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::NumStrokes, 18_500.0),
                 (ParamId::CurveType, 0.0),
                 (ParamId::StrokeWidth, 3.0),
+                (ParamId::Opaque, 0.0),
             ],
         },
         BenchDef {
             name: "Stroked Lines - 20px",
-            description: "rendering lines with large stroke width",
-            category: "Strokes",
+            description: "rendering semi-transparent lines with large stroke width",
+            category: "Strokes (alpha)",
             scene_id: SceneId::Strokes,
             scale: Some(BenchScale {
                 param: ParamId::NumStrokes,
@@ -450,12 +510,13 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::NumStrokes, 13_200.0),
                 (ParamId::CurveType, 0.0),
                 (ParamId::StrokeWidth, 20.0),
+                (ParamId::Opaque, 0.0),
             ],
         },
         BenchDef {
             name: "Stroked Quads - 3px",
-            description: "rendering quads with small stroke width",
-            category: "Strokes",
+            description: "rendering semi-transparent quads with small stroke width",
+            category: "Strokes (alpha)",
             scene_id: SceneId::Strokes,
             scale: Some(BenchScale {
                 param: ParamId::NumStrokes,
@@ -465,12 +526,13 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::NumStrokes, 6_900.0),
                 (ParamId::CurveType, 1.0),
                 (ParamId::StrokeWidth, 3.0),
+                (ParamId::Opaque, 0.0),
             ],
         },
         BenchDef {
             name: "Stroked Quads - 20px",
-            description: "rendering quads with large stroke width",
-            category: "Strokes",
+            description: "rendering semi-transparent quads with large stroke width",
+            category: "Strokes (alpha)",
             scene_id: SceneId::Strokes,
             scale: Some(BenchScale {
                 param: ParamId::NumStrokes,
@@ -480,12 +542,13 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::NumStrokes, 5_100.0),
                 (ParamId::CurveType, 1.0),
                 (ParamId::StrokeWidth, 20.0),
+                (ParamId::Opaque, 0.0),
             ],
         },
         BenchDef {
             name: "Stroked Cubics - 3px",
-            description: "rendering cubics with small stroke width",
-            category: "Strokes",
+            description: "rendering semi-transparent cubics with small stroke width",
+            category: "Strokes (alpha)",
             scene_id: SceneId::Strokes,
             scale: Some(BenchScale {
                 param: ParamId::NumStrokes,
@@ -495,12 +558,13 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::NumStrokes, 5_000.0),
                 (ParamId::CurveType, 2.0),
                 (ParamId::StrokeWidth, 3.0),
+                (ParamId::Opaque, 0.0),
             ],
         },
         BenchDef {
             name: "Stroked Cubics - 20px",
-            description: "rendering cubics with large stroke width",
-            category: "Strokes",
+            description: "rendering semi-transparent cubics with large stroke width",
+            category: "Strokes (alpha)",
             scene_id: SceneId::Strokes,
             scale: Some(BenchScale {
                 param: ParamId::NumStrokes,
@@ -510,6 +574,72 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::NumStrokes, 3_500.0),
                 (ParamId::CurveType, 2.0),
                 (ParamId::StrokeWidth, 20.0),
+                (ParamId::Opaque, 0.0),
+            ],
+        },
+        // ── Strokes (opaque) ───────────────────────────────────────────
+        BenchDef {
+            name: "Stroked Lines - 3px (opaque)",
+            description: "rendering opaque lines with small stroke width",
+            category: "Strokes (opaque)",
+            scene_id: SceneId::Strokes,
+            scale: Some(BenchScale {
+                param: ParamId::NumStrokes,
+                calibrated_value: 18_500,
+            }),
+            params: &[
+                (ParamId::NumStrokes, 18_500.0),
+                (ParamId::CurveType, 0.0),
+                (ParamId::StrokeWidth, 3.0),
+                (ParamId::Opaque, 1.0),
+            ],
+        },
+        BenchDef {
+            name: "Stroked Lines - 20px (opaque)",
+            description: "rendering opaque lines with large stroke width",
+            category: "Strokes (opaque)",
+            scene_id: SceneId::Strokes,
+            scale: Some(BenchScale {
+                param: ParamId::NumStrokes,
+                calibrated_value: 13_200,
+            }),
+            params: &[
+                (ParamId::NumStrokes, 13_200.0),
+                (ParamId::CurveType, 0.0),
+                (ParamId::StrokeWidth, 20.0),
+                (ParamId::Opaque, 1.0),
+            ],
+        },
+        BenchDef {
+            name: "Stroked Cubics - 3px (opaque)",
+            description: "rendering opaque cubics with small stroke width",
+            category: "Strokes (opaque)",
+            scene_id: SceneId::Strokes,
+            scale: Some(BenchScale {
+                param: ParamId::NumStrokes,
+                calibrated_value: 5_000,
+            }),
+            params: &[
+                (ParamId::NumStrokes, 5_000.0),
+                (ParamId::CurveType, 2.0),
+                (ParamId::StrokeWidth, 3.0),
+                (ParamId::Opaque, 1.0),
+            ],
+        },
+        BenchDef {
+            name: "Stroked Cubics - 20px (opaque)",
+            description: "rendering opaque cubics with large stroke width",
+            category: "Strokes (opaque)",
+            scene_id: SceneId::Strokes,
+            scale: Some(BenchScale {
+                param: ParamId::NumStrokes,
+                calibrated_value: 3_500,
+            }),
+            params: &[
+                (ParamId::NumStrokes, 3_500.0),
+                (ParamId::CurveType, 2.0),
+                (ParamId::StrokeWidth, 20.0),
+                (ParamId::Opaque, 1.0),
             ],
         },
         BenchDef {
@@ -547,10 +677,11 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
             scale: None,
             params: &[(ParamId::SvgAsset, 2.0)],
         },
+        // ── Clip Paths (alpha) ─────────────────────────────────────────
         BenchDef {
             name: "Rect - 400px - Global `clip_path`",
-            description: "rendering many paths with a single clip path using `push_clip_path`",
-            category: "Clip Paths",
+            description: "rendering many semi-transparent paths with a single clip path",
+            category: "Clip Paths (alpha)",
             scene_id: SceneId::Clip,
             scale: Some(BenchScale {
                 param: ParamId::NumRects,
@@ -561,12 +692,13 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::RectSize, 400.0),
                 (ParamId::ClipMode, 1.0),
                 (ParamId::ClipMethod, 0.0),
+                (ParamId::Opaque, 0.0),
             ],
         },
         BenchDef {
             name: "Rect - 400px - Global `clip_layer`",
-            description: "rendering many paths with a single clip path using `push_clip_layer`",
-            category: "Clip Paths",
+            description: "rendering many semi-transparent paths with a single clip layer",
+            category: "Clip Paths (alpha)",
             scene_id: SceneId::Clip,
             scale: Some(BenchScale {
                 param: ParamId::NumRects,
@@ -577,12 +709,13 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::RectSize, 400.0),
                 (ParamId::ClipMode, 1.0),
                 (ParamId::ClipMethod, 1.0),
+                (ParamId::Opaque, 0.0),
             ],
         },
         BenchDef {
             name: "Rect - 200px - Per-shape `clip_path`",
-            description: "rendering many paths with many clip paths using `push_clip_path`",
-            category: "Clip Paths",
+            description: "rendering many semi-transparent paths with many clip paths",
+            category: "Clip Paths (alpha)",
             scene_id: SceneId::Clip,
             scale: Some(BenchScale {
                 param: ParamId::NumRects,
@@ -593,12 +726,13 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::RectSize, 200.0),
                 (ParamId::ClipMode, 2.0),
                 (ParamId::ClipMethod, 0.0),
+                (ParamId::Opaque, 0.0),
             ],
         },
         BenchDef {
             name: "Rect - 200px - Per-shape `clip_layer`",
-            description: "rendering many paths with many clip paths using `push_clip_layer`",
-            category: "Clip Paths",
+            description: "rendering many semi-transparent paths with many clip layers",
+            category: "Clip Paths (alpha)",
             scene_id: SceneId::Clip,
             scale: Some(BenchScale {
                 param: ParamId::NumRects,
@@ -609,40 +743,135 @@ pub(crate) fn bench_defs() -> Vec<BenchDef> {
                 (ParamId::RectSize, 200.0),
                 (ParamId::ClipMode, 2.0),
                 (ParamId::ClipMethod, 1.0),
+                (ParamId::Opaque, 0.0),
+            ],
+        },
+        // ── Clip Paths (opaque) ────────────────────────────────────────
+        BenchDef {
+            name: "Rect - 400px - Global `clip_path` (opaque)",
+            description: "rendering many opaque paths with a single clip path",
+            category: "Clip Paths (opaque)",
+            scene_id: SceneId::Clip,
+            scale: Some(BenchScale {
+                param: ParamId::NumRects,
+                calibrated_value: 2_100,
+            }),
+            params: &[
+                (ParamId::NumRects, 2_100.0),
+                (ParamId::RectSize, 400.0),
+                (ParamId::ClipMode, 1.0),
+                (ParamId::ClipMethod, 0.0),
+                (ParamId::Opaque, 1.0),
             ],
         },
         BenchDef {
+            name: "Rect - 200px - Per-shape `clip_path` (opaque)",
+            description: "rendering many opaque paths with many clip paths",
+            category: "Clip Paths (opaque)",
+            scene_id: SceneId::Clip,
+            scale: Some(BenchScale {
+                param: ParamId::NumRects,
+                calibrated_value: 930,
+            }),
+            params: &[
+                (ParamId::NumRects, 930.0),
+                (ParamId::RectSize, 200.0),
+                (ParamId::ClipMode, 2.0),
+                (ParamId::ClipMethod, 0.0),
+                (ParamId::Opaque, 1.0),
+            ],
+        },
+        // ── Text (alpha) ───────────────────────────────────────────────
+        BenchDef {
             name: "Text - 8px",
-            description: "rendering small text",
-            category: "Text",
+            description: "rendering small semi-transparent text",
+            category: "Text (alpha)",
             scene_id: SceneId::Text,
             scale: Some(BenchScale {
                 param: ParamId::NumRuns,
                 calibrated_value: 2_900,
             }),
-            params: &[(ParamId::NumRuns, 2_900.0), (ParamId::FontSize, 8.0)],
+            params: &[
+                (ParamId::NumRuns, 2_900.0),
+                (ParamId::FontSize, 8.0),
+                (ParamId::Opaque, 0.0),
+            ],
         },
         BenchDef {
             name: "Text - 24px",
-            description: "rendering medium-sized text",
-            category: "Text",
+            description: "rendering medium-sized semi-transparent text",
+            category: "Text (alpha)",
             scene_id: SceneId::Text,
             scale: Some(BenchScale {
                 param: ParamId::NumRuns,
                 calibrated_value: 2_200,
             }),
-            params: &[(ParamId::NumRuns, 2_200.0), (ParamId::FontSize, 24.0)],
+            params: &[
+                (ParamId::NumRuns, 2_200.0),
+                (ParamId::FontSize, 24.0),
+                (ParamId::Opaque, 0.0),
+            ],
         },
         BenchDef {
             name: "Text - 60px",
-            description: "rendering large text",
-            category: "Text",
+            description: "rendering large semi-transparent text",
+            category: "Text (alpha)",
             scene_id: SceneId::Text,
             scale: Some(BenchScale {
                 param: ParamId::NumRuns,
                 calibrated_value: 1_300,
             }),
-            params: &[(ParamId::NumRuns, 1_300.0), (ParamId::FontSize, 60.0)],
+            params: &[
+                (ParamId::NumRuns, 1_300.0),
+                (ParamId::FontSize, 60.0),
+                (ParamId::Opaque, 0.0),
+            ],
+        },
+        // ── Text (opaque) ──────────────────────────────────────────────
+        BenchDef {
+            name: "Text - 8px (opaque)",
+            description: "rendering small opaque text",
+            category: "Text (opaque)",
+            scene_id: SceneId::Text,
+            scale: Some(BenchScale {
+                param: ParamId::NumRuns,
+                calibrated_value: 2_900,
+            }),
+            params: &[
+                (ParamId::NumRuns, 2_900.0),
+                (ParamId::FontSize, 8.0),
+                (ParamId::Opaque, 1.0),
+            ],
+        },
+        BenchDef {
+            name: "Text - 24px (opaque)",
+            description: "rendering medium-sized opaque text",
+            category: "Text (opaque)",
+            scene_id: SceneId::Text,
+            scale: Some(BenchScale {
+                param: ParamId::NumRuns,
+                calibrated_value: 2_200,
+            }),
+            params: &[
+                (ParamId::NumRuns, 2_200.0),
+                (ParamId::FontSize, 24.0),
+                (ParamId::Opaque, 1.0),
+            ],
+        },
+        BenchDef {
+            name: "Text - 60px (opaque)",
+            description: "rendering large opaque text",
+            category: "Text (opaque)",
+            scene_id: SceneId::Text,
+            scale: Some(BenchScale {
+                param: ParamId::NumRuns,
+                calibrated_value: 1_300,
+            }),
+            params: &[
+                (ParamId::NumRuns, 1_300.0),
+                (ParamId::FontSize, 60.0),
+                (ParamId::Opaque, 1.0),
+            ],
         },
     ]
 }

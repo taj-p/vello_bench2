@@ -534,6 +534,18 @@ fn wire_events(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
         cb.forget();
     }
 
+    // Load report dropdown
+    {
+        let s = state.clone();
+        let sel = state.borrow().ui.load_select().clone();
+        let cb = Closure::wrap(Box::new(move || {
+            s.borrow_mut().ui.load_report_into_rows();
+        }) as Box<dyn FnMut()>);
+        sel.add_event_listener_with_callback("change", cb.as_ref().unchecked_ref())
+            .unwrap();
+        cb.forget();
+    }
+
     // Compare dropdown
     {
         let s = state.clone();

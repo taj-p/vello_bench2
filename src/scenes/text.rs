@@ -39,6 +39,8 @@ pub struct TextScene {
     num_runs: usize,
     speed: f64,
     font_size: f32,
+    /// When true, text colors use alpha 255 instead of 220.
+    opaque: bool,
     runs: Vec<AnimatedText>,
     rng: Rng,
     last_time: f64,
@@ -61,6 +63,7 @@ impl TextScene {
             num_runs: 200,
             speed: 5.0,
             font_size: 24.0,
+            opaque: false,
             runs: Vec::new(),
             rng: Rng::new(0xBAAD_F00D),
             last_time: 0.0,
@@ -76,9 +79,10 @@ impl TextScene {
         let size = skrifa::instance::Size::new(self.font_size);
         let charmap = font_ref.charmap();
         let glyph_metrics = font_ref.glyph_metrics(size, skrifa::instance::LocationRef::default());
+        let alpha = if self.opaque { 255 } else { 220 };
 
         while self.runs.len() < self.num_runs {
-            let run = random_text_run(&mut self.rng, w, h, &charmap, &glyph_metrics);
+            let run = random_text_run(&mut self.rng, w, h, alpha, &charmap, &glyph_metrics);
             self.runs.push(run);
         }
         self.runs.truncate(self.num_runs);
@@ -89,6 +93,7 @@ fn random_text_run(
     rng: &mut Rng,
     w: f64,
     h: f64,
+    alpha: u8,
     charmap: &skrifa::charmap::Charmap<'_>,
     glyph_metrics: &skrifa::metrics::GlyphMetrics<'_>,
 ) -> AnimatedText {
@@ -116,8 +121,8 @@ fn random_text_run(
         y: rng.f64() * max_y,
         vx: (rng.f64() - 0.5) * 200.0,
         vy: (rng.f64() - 0.5) * 200.0,
-        color: rng.color(220),
         text,
+        color: rng.color(alpha),
         run_width,
     }
 }
@@ -153,6 +158,12 @@ impl BenchScene for TextScene {
                 },
                 value: self.font_size as f64,
             },
+            Param {
+                id: ParamId::Opaque,
+                label: "Opaque",
+                kind: ParamKind::Select(vec![("No", 0.0), ("Yes", 1.0)]),
+                value: if self.opaque { 1.0 } else { 0.0 },
+            },
         ]
     }
 
@@ -163,7 +174,13 @@ impl BenchScene for TextScene {
                 let new_size = value as f32;
                 if (new_size - self.font_size).abs() > 0.01 {
                     self.font_size = new_size;
-                    // Force regeneration since advance widths depend on font size.
+                    self.runs.clear();
+                }
+            }
+            ParamId::Opaque => {
+                let new_val = value >= 0.5;
+                if new_val != self.opaque {
+                    self.opaque = new_val;
                     self.runs.clear();
                 }
             }
