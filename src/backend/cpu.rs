@@ -36,13 +36,12 @@ pub struct BackendImpl {
     width: u16,
     height: u16,
     gl: GL,
-    #[allow(dead_code)]
     program: WebGlProgram,
     quad_buffer: WebGlBuffer,
     position_loc: u32,
     sampler_loc: WebGlUniformLocation,
     texture: WebGlTexture,
-    target: Option<Pixmap>,
+    target: Pixmap,
 }
 
 impl std::fmt::Debug for BackendImpl {
@@ -106,7 +105,7 @@ impl BackendImpl {
             position_loc,
             sampler_loc,
             texture,
-            target: None,
+            target: Pixmap::new(w as u16, h as u16),
         }
     }
 
@@ -116,13 +115,11 @@ impl BackendImpl {
 
     pub fn render_offscreen(&mut self) {
         self.ctx.flush();
-        self.target = Some(Pixmap::new(self.width, self.height));
-        self.ctx.render_to_pixmap(self.target.as_mut().unwrap());
+        self.ctx.render_to_pixmap(&mut self.target);
     }
 
     pub fn blit(&mut self) {
-        let target = self.target.take().expect("render_offscreen not called");
-        let bytes: &[u8] = bytemuck::cast_slice(target.data());
+        let bytes: &[u8] = bytemuck::cast_slice(self.target.data());
 
         self.gl.use_program(Some(&self.program));
         self.gl
@@ -166,6 +163,7 @@ impl BackendImpl {
         self.width = w as u16;
         self.height = h as u16;
         self.ctx = vello_cpu::RenderContext::new(w as u16, h as u16);
+        self.target = Pixmap::new(self.width, self.height);
     }
 
     pub fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
