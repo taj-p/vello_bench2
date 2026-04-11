@@ -23,14 +23,11 @@
       html, body {
         margin: 0;
         min-height: 100%;
-        background:
-          radial-gradient(circle at top left, rgba(96, 165, 250, 0.14), transparent 26%),
-          radial-gradient(circle at top right, rgba(103, 232, 249, 0.10), transparent 24%),
-          linear-gradient(180deg, #f8fbff 0%, #eef4fb 52%, #edf3fa 100%);
+        background: #020617;
       }
 
       body {
-        color: #0f172a;
+        color: #e2e8f0;
         font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
       }
     }
@@ -39,20 +36,11 @@
 
 <body class="overflow-hidden antialiased selection:bg-cyan-300/30">
   <div id="dashboard-root" class="relative min-h-screen">
-    <div class="pointer-events-none fixed inset-0 overflow-hidden">
-      <div class="absolute left-[-10rem] top-[-8rem] h-80 w-80 rounded-full bg-cyan-400/12 blur-3xl"></div>
-      <div class="absolute bottom-[-10rem] right-[-8rem] h-96 w-96 rounded-full bg-blue-500/12 blur-3xl"></div>
-    </div>
-
     <div
       id="canvas-stage-shell"
-      class="pointer-events-none fixed inset-x-0 top-16 bottom-0 overflow-hidden border-t border-slate-200/80 bg-white/55 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.22)] ring-1 ring-white/60 backdrop-blur-md lg:top-20"
+      class="pointer-events-none fixed inset-x-0 top-16 bottom-0 overflow-hidden border-t border-white/10 bg-slate-950 lg:top-20"
     >
-      <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.10),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.14),rgba(226,232,240,0.52))]"></div>
-      <div class="absolute inset-0 border border-white/50"></div>
       <div id="canvas-host" class="absolute inset-0 overflow-hidden"></div>
-      <div class="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white/55 to-transparent"></div>
-      <div class="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-slate-100/65 to-transparent"></div>
     </div>
 
     <div id="app-overlay" class="pointer-events-none relative z-20 min-h-screen"></div>
