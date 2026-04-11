@@ -25,6 +25,7 @@ use vello_common::pixmap::Pixmap;
 use wasm_bindgen::JsCast;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
+use crate::backend::{Backend, BackendKind};
 use crate::capability::{CapabilityProfile, UnsupportedParamValue};
 use crate::scenes::{ParamId, SceneId};
 
@@ -114,12 +115,18 @@ impl BackendImpl {
             uploaded_images: Vec::new(),
         }
     }
+}
 
-    pub fn reset(&mut self) {
+impl Backend for BackendImpl {
+    fn kind(&self) -> BackendKind {
+        BackendKind::Pathfinder
+    }
+
+    fn reset(&mut self) {
         self.ctx.reset();
     }
 
-    pub fn render_offscreen(&mut self) {
+    fn render_offscreen(&mut self) {
         let mut scene = self.ctx.take_scene();
         scene.build_and_render(
             &mut self.renderer,
@@ -128,108 +135,114 @@ impl BackendImpl {
         );
     }
 
-    pub fn blit(&mut self) {}
+    fn blit(&mut self) {}
 
-    pub fn is_cpu(&self) -> bool {
+    fn is_cpu(&self) -> bool {
         false
     }
 
-    pub fn supports_encode_timing(&self) -> bool {
+    fn supports_encode_timing(&self) -> bool {
         false
     }
 
-    pub fn sync(&self) {}
+    fn sync(&self) {}
 
-    pub fn resize(&mut self, w: u32, h: u32) {
+    fn resize(&mut self, w: u32, h: u32) {
         self.ctx.resize(w as u16, h as u16);
         self.renderer.options_mut().dest = DestFramebuffer::full_window(vec2i(w as i32, h as i32));
         self.renderer.options_mut().background_color = None;
         self.renderer.dest_framebuffer_size_changed();
     }
 
-    pub fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
-        let may_have_opacities = pixmap.may_have_opacities();
-        let id = ImageId::new(self.uploaded_images.len() as u32);
-        self.uploaded_images
-            .push(UploadedImage::from_pixmap(pixmap));
-        ImageSource::opaque_id_with_opacity_hint(id, may_have_opacities)
-    }
-
-    pub fn set_paint(&mut self, paint: PaintType) {
+    fn set_paint(&mut self, paint: PaintType) {
         self.ctx.set_paint(paint, &self.uploaded_images);
     }
 
-    pub fn set_transform(&mut self, transform: Affine) {
+    fn set_transform(&mut self, transform: Affine) {
         self.ctx.set_transform(transform);
     }
 
-    pub fn reset_transform(&mut self) {
+    fn reset_transform(&mut self) {
         self.ctx.reset_transform();
     }
 
-    pub fn set_stroke(&mut self, stroke: Stroke) {
+    fn set_stroke(&mut self, stroke: Stroke) {
         self.ctx.set_stroke(stroke);
     }
 
-    pub fn set_paint_transform(&mut self, _transform: Affine) {}
+    fn set_paint_transform(&mut self, _transform: Affine) {}
 
-    pub fn reset_paint_transform(&mut self) {}
+    fn reset_paint_transform(&mut self) {}
 
-    pub fn set_fill_rule(&mut self, fill: Fill) {
+    fn set_fill_rule(&mut self, fill: Fill) {
         self.ctx.set_fill_rule(fill);
     }
 
-    pub fn fill_rect(&mut self, rect: &Rect) {
+    fn fill_rect(&mut self, rect: &Rect) {
         self.ctx.fill_rect(rect);
     }
 
-    pub fn fill_path(&mut self, path: &BezPath) {
+    fn fill_path(&mut self, path: &BezPath) {
         self.ctx.fill_path(path);
     }
 
-    pub fn stroke_path(&mut self, path: &BezPath) {
+    fn stroke_path(&mut self, path: &BezPath) {
         self.ctx.stroke_path(path);
     }
 
-    pub fn push_clip_path(&mut self, path: &BezPath) {
+    fn push_clip_path(&mut self, path: &BezPath) {
         self.ctx.push_clip_path(path);
     }
 
-    pub fn push_clip_layer(&mut self, path: &BezPath) {
+    fn push_clip_layer(&mut self, path: &BezPath) {
         self.ctx.push_clip_layer(path);
     }
 
-    pub fn set_filter_effect(&mut self, filter: Filter) {
+    fn set_filter_effect(&mut self, filter: Filter) {
         let _ = filter;
         // Pathfinder filter support is intentionally disabled. The shadow-based
         // approximation was visually incorrect and made FilterLayers look buggy.
     }
 
-    pub fn pop_clip_path(&mut self) {
+    fn pop_clip_path(&mut self) {
         self.ctx.pop_clip_path();
     }
 
-    pub fn pop_layer(&mut self) {
+    fn pop_layer(&mut self) {
         self.ctx.pop_layer();
     }
 
-    pub fn draw_text(
+    fn draw_text(
         &mut self,
-        _font: &FontData,
-        _font_size: f32,
-        _hint: bool,
-        _text: &str,
-        _x: f32,
-        _y: f32,
+        font: &FontData,
+        font_size: f32,
+        hint: bool,
+        text: &str,
+        x: f32,
+        y: f32,
     ) {
+        let _ = font;
+        let _ = font_size;
+        let _ = hint;
+        let _ = text;
+        let _ = x;
+        let _ = y;
         // Pathfinder text stays disabled in the wasm build. Enabling `pathfinder_canvas`
         // `pf-text` support pulls in freetype/harfbuzz native dependencies, which fail
         // to build for our `wasm32-unknown-unknown` serve/build pipeline.
     }
 
-    pub fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool) {
+    fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool) {
         self.ctx
             .draw_image(image, rect, bilinear, &self.uploaded_images);
+    }
+
+    fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
+        let may_have_opacities = pixmap.may_have_opacities();
+        let id = ImageId::new(self.uploaded_images.len() as u32);
+        self.uploaded_images
+            .push(UploadedImage::from_pixmap(pixmap));
+        ImageSource::opaque_id_with_opacity_hint(id, may_have_opacities)
     }
 }
 

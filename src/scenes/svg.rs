@@ -6,7 +6,7 @@
 )]
 
 use super::{BenchScene, Param, ParamId, ParamKind, SceneId};
-use crate::backend::Renderer;
+use crate::backend::Backend;
 use usvg::tiny_skia_path::PathSegment;
 use usvg::{Group, Node};
 use vello_common::kurbo::{Affine, BezPath, Stroke};
@@ -255,7 +255,7 @@ impl BenchScene for SvgScene {
 
     fn render(
         &mut self,
-        backend: &mut dyn Renderer,
+        backend: &mut dyn Backend,
         width: u32,
         height: u32,
         _time: f64,

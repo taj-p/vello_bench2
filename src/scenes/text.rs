@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use super::{BenchScene, Param, ParamId, ParamKind, SceneId, bounce, delta_time};
-use crate::backend::Renderer;
+use crate::backend::Backend;
 use crate::rng::Rng;
 use skrifa::MetadataProvider;
 use skrifa::raw::FileRef;
@@ -190,7 +190,7 @@ impl BenchScene for TextScene {
 
     fn render(
         &mut self,
-        backend: &mut dyn Renderer,
+        backend: &mut dyn Backend,
         width: u32,
         height: u32,
         time: f64,

@@ -24,6 +24,7 @@ use std::rc::Rc;
 
 use backend::{
     Backend, BackendCapabilities, BackendKind, current_backend_capabilities, current_backend_kind,
+    new_backend,
 };
 use fps::FpsTracker;
 use harness::{BenchDef, BenchHarness, HarnessEvent, bench_defs};
@@ -45,7 +46,7 @@ struct AppState {
     scenes: Vec<Box<dyn BenchScene>>,
     current_scene: usize,
     backend_caps: BackendCapabilities,
-    backend: Backend,
+    backend: Box<dyn Backend>,
     canvas: HtmlCanvasElement,
     width: u32,
     height: u32,
@@ -99,7 +100,7 @@ impl AppState {
 
         self.backend_caps = current_backend_capabilities(kind);
         self.canvas = replace_canvas_element(&self.canvas, self.width, self.height, self.ui.mode);
-        self.backend = Backend::new(&self.canvas, self.width, self.height, kind);
+        self.backend = new_backend(&self.canvas, self.width, self.height, kind);
         self.scenes = scenes::all_scenes();
 
         let next_scene = if self
@@ -150,7 +151,7 @@ impl AppState {
         if selected != self.current_scene && selected < self.scenes.len() {
             self.current_scene = selected;
             let kind = self.backend.kind();
-            self.backend = Backend::new(&self.canvas, self.width, self.height, kind);
+            self.backend = new_backend(&self.canvas, self.width, self.height, kind);
             self.scenes = scenes::all_scenes();
             self.fps_tracker.reset(now);
             self.reset_view();
@@ -171,7 +172,7 @@ impl AppState {
         self.backend.reset();
         let (w, h) = (self.width, self.height);
         let view = Affine::translate((self.pan_x, self.pan_y)) * Affine::scale(self.zoom);
-        self.scenes[idx].render(&mut self.backend, w, h, now, view);
+        self.scenes[idx].render(self.backend.as_mut(), w, h, now, view);
 
         let encode_ms = perf.now() - t0;
 
@@ -404,7 +405,7 @@ pub async fn run() {
         px_w,
         px_h,
     );
-    let backend = Backend::new(&canvas, px_w, px_h, backend_kind);
+    let backend = new_backend(&canvas, px_w, px_h, backend_kind);
     let now = performance.now();
 
     configure_canvas(&canvas, px_w, px_h, initial_mode);

@@ -6,7 +6,7 @@
 )]
 
 use super::{BenchScene, Param, ParamId, ParamKind, SceneId, bounce, delta_time};
-use crate::backend::Renderer;
+use crate::backend::Backend;
 use crate::rng::Rng;
 use vello_common::color::AlphaColor;
 use vello_common::filter_effects::{EdgeMode, Filter, FilterPrimitive};
@@ -215,7 +215,7 @@ impl BenchScene for FilterLayersScene {
 
     fn render(
         &mut self,
-        backend: &mut dyn Renderer,
+        backend: &mut dyn Backend,
         width: u32,
         height: u32,
         time: f64,

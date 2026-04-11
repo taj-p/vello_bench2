@@ -6,7 +6,7 @@
 )]
 
 use super::{BenchScene, Param, ParamId, ParamKind, SceneId, bounce, delta_time};
-use crate::backend::Renderer;
+use crate::backend::Backend;
 use crate::rng::Rng;
 use vello_common::kurbo::{Affine, BezPath};
 use vello_common::peniko::{Color, Fill};
@@ -89,7 +89,7 @@ impl BenchScene for PolylineScene {
 
     fn render(
         &mut self,
-        backend: &mut dyn Renderer,
+        backend: &mut dyn Backend,
         width: u32,
         height: u32,
         time: f64,

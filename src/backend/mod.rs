@@ -80,8 +80,15 @@ pub fn current_backend_kind() -> BackendKind {
         .unwrap_or(BackendKind::Hybrid)
 }
 
-pub trait Renderer {
+pub trait Backend {
+    fn kind(&self) -> BackendKind;
+    fn reset(&mut self);
+    fn render_offscreen(&mut self);
+    fn blit(&mut self);
+    fn is_cpu(&self) -> bool;
     fn supports_encode_timing(&self) -> bool;
+    fn sync(&self);
+    fn resize(&mut self, w: u32, h: u32);
     fn set_paint(&mut self, paint: PaintType);
     fn set_transform(&mut self, transform: Affine);
     fn reset_transform(&mut self);
@@ -163,284 +170,16 @@ pub fn current_backend_capabilities(kind: BackendKind) -> BackendCapabilities {
     BackendCapabilities { kind }
 }
 
-pub struct Backend {
+pub fn new_backend(
+    canvas: &HtmlCanvasElement,
+    w: u32,
+    h: u32,
     kind: BackendKind,
-    inner: BackendImpl,
-}
-
-enum BackendImpl {
-    Hybrid(hybrid::BackendImpl),
-    Cpu(cpu::BackendImpl),
-    Pathfinder(pathfinder::BackendImpl),
-    Canvas2d(canvas2d::BackendImpl),
-}
-
-impl std::fmt::Debug for Backend {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.inner {
-            BackendImpl::Hybrid(inner) => inner.fmt(f),
-            BackendImpl::Cpu(inner) => inner.fmt(f),
-            BackendImpl::Pathfinder(inner) => inner.fmt(f),
-            BackendImpl::Canvas2d(inner) => inner.fmt(f),
-        }
-    }
-}
-
-impl Backend {
-    pub fn new(canvas: &HtmlCanvasElement, w: u32, h: u32, kind: BackendKind) -> Self {
-        let inner = match kind {
-            BackendKind::Hybrid => BackendImpl::Hybrid(hybrid::BackendImpl::new(canvas, w, h)),
-            BackendKind::Cpu => BackendImpl::Cpu(cpu::BackendImpl::new(canvas, w, h)),
-            BackendKind::Pathfinder => {
-                BackendImpl::Pathfinder(pathfinder::BackendImpl::new(canvas, w, h))
-            }
-            BackendKind::Canvas2d => {
-                BackendImpl::Canvas2d(canvas2d::BackendImpl::new(canvas, w, h))
-            }
-        };
-        Self { kind, inner }
-    }
-
-    pub fn kind(&self) -> BackendKind {
-        self.kind
-    }
-
-    pub fn reset(&mut self) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.reset(),
-            BackendImpl::Cpu(inner) => inner.reset(),
-            BackendImpl::Pathfinder(inner) => inner.reset(),
-            BackendImpl::Canvas2d(inner) => inner.reset(),
-        }
-    }
-
-    pub fn render_offscreen(&mut self) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.render_offscreen(),
-            BackendImpl::Cpu(inner) => inner.render_offscreen(),
-            BackendImpl::Pathfinder(inner) => inner.render_offscreen(),
-            BackendImpl::Canvas2d(inner) => inner.render_offscreen(),
-        }
-    }
-
-    pub fn blit(&mut self) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.blit(),
-            BackendImpl::Cpu(inner) => inner.blit(),
-            BackendImpl::Pathfinder(inner) => inner.blit(),
-            BackendImpl::Canvas2d(inner) => inner.blit(),
-        }
-    }
-
-    pub fn is_cpu(&self) -> bool {
-        match &self.inner {
-            BackendImpl::Hybrid(inner) => inner.is_cpu(),
-            BackendImpl::Cpu(inner) => inner.is_cpu(),
-            BackendImpl::Pathfinder(inner) => inner.is_cpu(),
-            BackendImpl::Canvas2d(inner) => inner.is_cpu(),
-        }
-    }
-
-    pub fn supports_encode_timing(&self) -> bool {
-        match &self.inner {
-            BackendImpl::Hybrid(inner) => inner.supports_encode_timing(),
-            BackendImpl::Cpu(inner) => inner.supports_encode_timing(),
-            BackendImpl::Pathfinder(inner) => inner.supports_encode_timing(),
-            BackendImpl::Canvas2d(inner) => inner.supports_encode_timing(),
-        }
-    }
-
-    pub fn sync(&self) {
-        match &self.inner {
-            BackendImpl::Hybrid(inner) => inner.sync(),
-            BackendImpl::Cpu(inner) => inner.sync(),
-            BackendImpl::Pathfinder(inner) => inner.sync(),
-            BackendImpl::Canvas2d(inner) => inner.sync(),
-        }
-    }
-
-    pub fn resize(&mut self, w: u32, h: u32) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.resize(w, h),
-            BackendImpl::Cpu(inner) => inner.resize(w, h),
-            BackendImpl::Pathfinder(inner) => inner.resize(w, h),
-            BackendImpl::Canvas2d(inner) => inner.resize(w, h),
-        }
-    }
-}
-
-impl Renderer for Backend {
-    fn supports_encode_timing(&self) -> bool {
-        self.supports_encode_timing()
-    }
-
-    fn set_paint(&mut self, paint: PaintType) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.set_paint(paint),
-            BackendImpl::Cpu(inner) => inner.set_paint(paint),
-            BackendImpl::Pathfinder(inner) => inner.set_paint(paint),
-            BackendImpl::Canvas2d(inner) => inner.set_paint(paint),
-        }
-    }
-
-    fn set_transform(&mut self, transform: Affine) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.set_transform(transform),
-            BackendImpl::Cpu(inner) => inner.set_transform(transform),
-            BackendImpl::Pathfinder(inner) => inner.set_transform(transform),
-            BackendImpl::Canvas2d(inner) => inner.set_transform(transform),
-        }
-    }
-
-    fn reset_transform(&mut self) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.reset_transform(),
-            BackendImpl::Cpu(inner) => inner.reset_transform(),
-            BackendImpl::Pathfinder(inner) => inner.reset_transform(),
-            BackendImpl::Canvas2d(inner) => inner.reset_transform(),
-        }
-    }
-
-    fn set_stroke(&mut self, stroke: Stroke) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.set_stroke(stroke),
-            BackendImpl::Cpu(inner) => inner.set_stroke(stroke),
-            BackendImpl::Pathfinder(inner) => inner.set_stroke(stroke),
-            BackendImpl::Canvas2d(inner) => inner.set_stroke(stroke),
-        }
-    }
-
-    fn set_paint_transform(&mut self, transform: Affine) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.set_paint_transform(transform),
-            BackendImpl::Cpu(inner) => inner.set_paint_transform(transform),
-            BackendImpl::Pathfinder(inner) => inner.set_paint_transform(transform),
-            BackendImpl::Canvas2d(inner) => inner.set_paint_transform(transform),
-        }
-    }
-
-    fn reset_paint_transform(&mut self) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.reset_paint_transform(),
-            BackendImpl::Cpu(inner) => inner.reset_paint_transform(),
-            BackendImpl::Pathfinder(inner) => inner.reset_paint_transform(),
-            BackendImpl::Canvas2d(inner) => inner.reset_paint_transform(),
-        }
-    }
-
-    fn set_fill_rule(&mut self, fill: Fill) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.set_fill_rule(fill),
-            BackendImpl::Cpu(inner) => inner.set_fill_rule(fill),
-            BackendImpl::Pathfinder(inner) => inner.set_fill_rule(fill),
-            BackendImpl::Canvas2d(inner) => inner.set_fill_rule(fill),
-        }
-    }
-
-    fn fill_rect(&mut self, rect: &Rect) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.fill_rect(rect),
-            BackendImpl::Cpu(inner) => inner.fill_rect(rect),
-            BackendImpl::Pathfinder(inner) => inner.fill_rect(rect),
-            BackendImpl::Canvas2d(inner) => inner.fill_rect(rect),
-        }
-    }
-
-    fn fill_path(&mut self, path: &BezPath) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.fill_path(path),
-            BackendImpl::Cpu(inner) => inner.fill_path(path),
-            BackendImpl::Pathfinder(inner) => inner.fill_path(path),
-            BackendImpl::Canvas2d(inner) => inner.fill_path(path),
-        }
-    }
-
-    fn stroke_path(&mut self, path: &BezPath) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.stroke_path(path),
-            BackendImpl::Cpu(inner) => inner.stroke_path(path),
-            BackendImpl::Pathfinder(inner) => inner.stroke_path(path),
-            BackendImpl::Canvas2d(inner) => inner.stroke_path(path),
-        }
-    }
-
-    fn push_clip_path(&mut self, path: &BezPath) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.push_clip_path(path),
-            BackendImpl::Cpu(inner) => inner.push_clip_path(path),
-            BackendImpl::Pathfinder(inner) => inner.push_clip_path(path),
-            BackendImpl::Canvas2d(inner) => inner.push_clip_path(path),
-        }
-    }
-
-    fn push_clip_layer(&mut self, path: &BezPath) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.push_clip_layer(path),
-            BackendImpl::Cpu(inner) => inner.push_clip_layer(path),
-            BackendImpl::Pathfinder(inner) => inner.push_clip_layer(path),
-            BackendImpl::Canvas2d(inner) => inner.push_clip_layer(path),
-        }
-    }
-
-    fn set_filter_effect(&mut self, filter: Filter) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.set_filter_effect(filter),
-            BackendImpl::Cpu(inner) => inner.set_filter_effect(filter),
-            BackendImpl::Pathfinder(inner) => inner.set_filter_effect(filter),
-            BackendImpl::Canvas2d(inner) => inner.set_filter_effect(filter),
-        }
-    }
-
-    fn pop_clip_path(&mut self) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.pop_clip_path(),
-            BackendImpl::Cpu(inner) => inner.pop_clip_path(),
-            BackendImpl::Pathfinder(inner) => inner.pop_clip_path(),
-            BackendImpl::Canvas2d(inner) => inner.pop_clip_path(),
-        }
-    }
-
-    fn pop_layer(&mut self) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.pop_layer(),
-            BackendImpl::Cpu(inner) => inner.pop_layer(),
-            BackendImpl::Pathfinder(inner) => inner.pop_layer(),
-            BackendImpl::Canvas2d(inner) => inner.pop_layer(),
-        }
-    }
-
-    fn draw_text(
-        &mut self,
-        font: &FontData,
-        font_size: f32,
-        hint: bool,
-        text: &str,
-        x: f32,
-        y: f32,
-    ) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.draw_text(font, font_size, hint, text, x, y),
-            BackendImpl::Cpu(inner) => inner.draw_text(font, font_size, hint, text, x, y),
-            BackendImpl::Pathfinder(inner) => inner.draw_text(font, font_size, hint, text, x, y),
-            BackendImpl::Canvas2d(inner) => inner.draw_text(font, font_size, hint, text, x, y),
-        }
-    }
-
-    fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.draw_image(image, rect, bilinear),
-            BackendImpl::Cpu(inner) => inner.draw_image(image, rect, bilinear),
-            BackendImpl::Pathfinder(inner) => inner.draw_image(image, rect, bilinear),
-            BackendImpl::Canvas2d(inner) => inner.draw_image(image, rect, bilinear),
-        }
-    }
-
-    fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.upload_image(pixmap),
-            BackendImpl::Cpu(inner) => inner.upload_image(pixmap),
-            BackendImpl::Pathfinder(inner) => inner.upload_image(pixmap),
-            BackendImpl::Canvas2d(inner) => inner.upload_image(pixmap),
-        }
+) -> Box<dyn Backend> {
+    match kind {
+        BackendKind::Hybrid => Box::new(hybrid::BackendImpl::new(canvas, w, h)),
+        BackendKind::Cpu => Box::new(cpu::BackendImpl::new(canvas, w, h)),
+        BackendKind::Pathfinder => Box::new(pathfinder::BackendImpl::new(canvas, w, h)),
+        BackendKind::Canvas2d => Box::new(canvas2d::BackendImpl::new(canvas, w, h)),
     }
 }

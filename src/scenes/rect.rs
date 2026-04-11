@@ -6,7 +6,7 @@
 )]
 
 use super::{BenchScene, Param, ParamId, ParamKind, SceneId, bounce, delta_time};
-use crate::backend::{Pixmap, Renderer};
+use crate::backend::{Backend, Pixmap};
 use crate::rng::Rng;
 use smallvec::smallvec;
 use vello_common::kurbo::{Affine, Point, Rect};
@@ -174,7 +174,7 @@ impl RectScene {
     /// Create a new rectangle benchmark scene with default parameters.
     pub fn new() -> Self {
         Self {
-            num_rects: 500,
+            num_rects: 200,
             speed: 5.0,
             paint_mode: 0,
             rect_size: 50.0,
@@ -214,7 +214,7 @@ impl RectScene {
     /// Each image gets a concentric-ring pattern with a unique frequency and
     /// color palette — cheap to compute but produces visible moiré when scaled,
     /// making the difference between nearest-neighbor and bilinear obvious.
-    fn ensure_images(&mut self, backend: &mut dyn Renderer) {
+    fn ensure_images(&mut self, backend: &mut dyn Backend) {
         if !self.image_sources.is_empty() && self.images_were_opaque == self.image_opaque {
             return;
         }
@@ -406,7 +406,7 @@ impl BenchScene for RectScene {
 
     fn render(
         &mut self,
-        backend: &mut dyn Renderer,
+        backend: &mut dyn Backend,
         width: u32,
         height: u32,
         time: f64,

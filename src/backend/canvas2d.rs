@@ -15,6 +15,7 @@ use web_sys::{
     window,
 };
 
+use crate::backend::{Backend, BackendKind};
 use crate::capability::CapabilityProfile;
 use crate::scenes::{ParamId, SceneId};
 
@@ -145,186 +146,6 @@ impl BackendImpl {
         out
     }
 
-    pub fn reset(&mut self) {
-        while self.clip_depth > 0 {
-            self.ctx.restore();
-            self.clip_depth -= 1;
-        }
-        while self.layer_stack.pop().is_some() {
-            self.ctx.restore();
-        }
-        self.ctx.reset_transform().unwrap();
-        self.ctx.clear_rect(0.0, 0.0, self.width, self.height);
-        self.ctx.set_fill_style_str("#11111b");
-        self.ctx.fill_rect(0.0, 0.0, self.width, self.height);
-        self.ctx.set_filter("none");
-        self.fill_rule = CanvasWindingRule::Nonzero;
-        self.current_transform = Affine::IDENTITY;
-    }
-
-    pub fn render_offscreen(&mut self) {}
-
-    pub fn blit(&mut self) {}
-
-    pub fn is_cpu(&self) -> bool {
-        false
-    }
-
-    pub fn supports_encode_timing(&self) -> bool {
-        false
-    }
-
-    pub fn sync(&self) {}
-
-    pub fn resize(&mut self, w: u32, h: u32) {
-        self.width = w as f64;
-        self.height = h as f64;
-        self.reset();
-    }
-
-    pub fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
-        let may_have_opacities = pixmap.may_have_opacities();
-        let uploaded = UploadedImage::from_pixmap(pixmap);
-        let id = ImageId::new(self.uploaded_images.len() as u32);
-        self.uploaded_images.push(uploaded);
-        ImageSource::opaque_id_with_opacity_hint(id, may_have_opacities)
-    }
-
-    pub fn set_paint(&mut self, paint: PaintType) {
-        self.current_paint = match paint {
-            PaintType::Solid(color) => PaintState::Solid(color.components),
-            PaintType::Gradient(gradient) => PaintState::Gradient(gradient),
-            PaintType::Image(image) => PaintState::Image(ImagePaint {
-                image: image.image,
-                quality: image.sampler.quality,
-                alpha: image.sampler.alpha,
-            }),
-        };
-    }
-
-    pub fn set_transform(&mut self, transform: Affine) {
-        self.current_transform = transform;
-        let c = transform.as_coeffs();
-        self.ctx
-            .set_transform(c[0], c[1], c[2], c[3], c[4], c[5])
-            .unwrap();
-    }
-
-    pub fn reset_transform(&mut self) {
-        self.current_transform = Affine::IDENTITY;
-        self.ctx.reset_transform().unwrap();
-    }
-
-    pub fn set_stroke(&mut self, stroke: Stroke) {
-        self.ctx.set_line_width(stroke.width);
-        self.ctx.set_miter_limit(stroke.miter_limit);
-        self.ctx.set_line_cap(match stroke.start_cap {
-            vello_common::kurbo::Cap::Butt => "butt",
-            vello_common::kurbo::Cap::Round => "round",
-            vello_common::kurbo::Cap::Square => "square",
-        });
-        self.ctx.set_line_join(match stroke.join {
-            vello_common::kurbo::Join::Bevel => "bevel",
-            vello_common::kurbo::Join::Miter => "miter",
-            vello_common::kurbo::Join::Round => "round",
-        });
-    }
-
-    pub fn set_paint_transform(&mut self, _transform: Affine) {}
-
-    pub fn reset_paint_transform(&mut self) {}
-
-    pub fn set_fill_rule(&mut self, fill: Fill) {
-        self.fill_rule = match fill {
-            Fill::NonZero => CanvasWindingRule::Nonzero,
-            Fill::EvenOdd => CanvasWindingRule::Evenodd,
-        };
-    }
-
-    pub fn fill_rect(&mut self, rect: &Rect) {
-        if self.draw_current_image(rect) {
-            return;
-        }
-        self.apply_fill_style();
-        self.ctx
-            .fill_rect(rect.x0, rect.y0, rect.width(), rect.height());
-    }
-
-    pub fn fill_path(&mut self, path: &BezPath) {
-        self.apply_fill_style();
-        self.ctx.begin_path();
-        trace_path(&self.ctx, path);
-        self.ctx.fill_with_canvas_winding_rule(self.fill_rule);
-    }
-
-    pub fn stroke_path(&mut self, path: &BezPath) {
-        self.apply_stroke_style();
-        self.ctx.begin_path();
-        trace_path(&self.ctx, path);
-        self.ctx.stroke();
-    }
-
-    pub fn push_clip_path(&mut self, path: &BezPath) {
-        self.ctx.save();
-        self.ctx.begin_path();
-        trace_path(&self.ctx, path);
-        self.ctx.clip_with_canvas_winding_rule(self.fill_rule);
-        self.clip_depth += 1;
-    }
-
-    pub fn push_clip_layer(&mut self, path: &BezPath) {
-        self.ctx.save();
-        self.ctx.begin_path();
-        trace_path(&self.ctx, path);
-        self.ctx.clip_with_canvas_winding_rule(self.fill_rule);
-        self.layer_stack.push(LayerKind::Clip);
-    }
-
-    pub fn set_filter_effect(&mut self, filter: Filter) {
-        self.ctx.save();
-        self.ctx
-            .set_filter(&canvas_filter_string(&PreparedFilter::new(
-                &filter,
-                &self.current_transform,
-            )));
-        self.layer_stack.push(LayerKind::Filter);
-    }
-
-    pub fn pop_clip_path(&mut self) {
-        if self.clip_depth > 0 {
-            self.ctx.restore();
-            self.clip_depth -= 1;
-        }
-    }
-
-    pub fn pop_layer(&mut self) {
-        if self.layer_stack.pop().is_some() {
-            self.ctx.restore();
-        }
-    }
-
-    pub fn draw_text(
-        &mut self,
-        _font: &FontData,
-        font_size: f32,
-        _hint: bool,
-        text: &str,
-        x: f32,
-        y: f32,
-    ) {
-        self.apply_fill_style();
-        self.ctx.set_font(&format!("{font_size}px sans-serif"));
-        self.ctx.set_text_baseline("alphabetic");
-        let _ = self.ctx.fill_text(text, x as f64, y as f64);
-    }
-
-    pub fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool) {
-        let Some(uploaded) = self.resolve_image(&image) else {
-            return;
-        };
-        self.draw_uploaded_image(uploaded, rect, bilinear, 1.0);
-    }
-
     fn draw_current_image(&self, rect: &Rect) -> bool {
         let PaintState::Image(image) = &self.current_paint else {
             return false;
@@ -390,6 +211,194 @@ impl BackendImpl {
             }
             PaintState::Image(_) => self.ctx.set_stroke_style_str("rgba(0, 0, 0, 0)"),
         }
+    }
+}
+
+impl Backend for BackendImpl {
+    fn kind(&self) -> BackendKind {
+        BackendKind::Canvas2d
+    }
+
+    fn reset(&mut self) {
+        while self.clip_depth > 0 {
+            self.ctx.restore();
+            self.clip_depth -= 1;
+        }
+        while self.layer_stack.pop().is_some() {
+            self.ctx.restore();
+        }
+        self.ctx.reset_transform().unwrap();
+        self.ctx.clear_rect(0.0, 0.0, self.width, self.height);
+        self.ctx.set_fill_style_str("#11111b");
+        self.ctx.fill_rect(0.0, 0.0, self.width, self.height);
+        self.ctx.set_filter("none");
+        self.fill_rule = CanvasWindingRule::Nonzero;
+        self.current_transform = Affine::IDENTITY;
+    }
+
+    fn render_offscreen(&mut self) {}
+
+    fn blit(&mut self) {}
+
+    fn is_cpu(&self) -> bool {
+        false
+    }
+
+    fn supports_encode_timing(&self) -> bool {
+        false
+    }
+
+    fn sync(&self) {}
+
+    fn resize(&mut self, w: u32, h: u32) {
+        self.width = w as f64;
+        self.height = h as f64;
+        self.reset();
+    }
+
+    fn set_paint(&mut self, paint: PaintType) {
+        self.current_paint = match paint {
+            PaintType::Solid(color) => PaintState::Solid(color.components),
+            PaintType::Gradient(gradient) => PaintState::Gradient(gradient),
+            PaintType::Image(image) => PaintState::Image(ImagePaint {
+                image: image.image,
+                quality: image.sampler.quality,
+                alpha: image.sampler.alpha,
+            }),
+        };
+    }
+
+    fn set_transform(&mut self, transform: Affine) {
+        self.current_transform = transform;
+        let c = transform.as_coeffs();
+        self.ctx
+            .set_transform(c[0], c[1], c[2], c[3], c[4], c[5])
+            .unwrap();
+    }
+
+    fn reset_transform(&mut self) {
+        self.current_transform = Affine::IDENTITY;
+        self.ctx.reset_transform().unwrap();
+    }
+
+    fn set_stroke(&mut self, stroke: Stroke) {
+        self.ctx.set_line_width(stroke.width);
+        self.ctx.set_miter_limit(stroke.miter_limit);
+        self.ctx.set_line_cap(match stroke.start_cap {
+            vello_common::kurbo::Cap::Butt => "butt",
+            vello_common::kurbo::Cap::Round => "round",
+            vello_common::kurbo::Cap::Square => "square",
+        });
+        self.ctx.set_line_join(match stroke.join {
+            vello_common::kurbo::Join::Bevel => "bevel",
+            vello_common::kurbo::Join::Miter => "miter",
+            vello_common::kurbo::Join::Round => "round",
+        });
+    }
+
+    fn set_paint_transform(&mut self, _transform: Affine) {}
+
+    fn reset_paint_transform(&mut self) {}
+
+    fn set_fill_rule(&mut self, fill: Fill) {
+        self.fill_rule = match fill {
+            Fill::NonZero => CanvasWindingRule::Nonzero,
+            Fill::EvenOdd => CanvasWindingRule::Evenodd,
+        };
+    }
+
+    fn fill_rect(&mut self, rect: &Rect) {
+        if self.draw_current_image(rect) {
+            return;
+        }
+        self.apply_fill_style();
+        self.ctx
+            .fill_rect(rect.x0, rect.y0, rect.width(), rect.height());
+    }
+
+    fn fill_path(&mut self, path: &BezPath) {
+        self.apply_fill_style();
+        self.ctx.begin_path();
+        trace_path(&self.ctx, path);
+        self.ctx.fill_with_canvas_winding_rule(self.fill_rule);
+    }
+
+    fn stroke_path(&mut self, path: &BezPath) {
+        self.apply_stroke_style();
+        self.ctx.begin_path();
+        trace_path(&self.ctx, path);
+        self.ctx.stroke();
+    }
+
+    fn push_clip_path(&mut self, path: &BezPath) {
+        self.ctx.save();
+        self.ctx.begin_path();
+        trace_path(&self.ctx, path);
+        self.ctx.clip_with_canvas_winding_rule(self.fill_rule);
+        self.clip_depth += 1;
+    }
+
+    fn push_clip_layer(&mut self, path: &BezPath) {
+        self.ctx.save();
+        self.ctx.begin_path();
+        trace_path(&self.ctx, path);
+        self.ctx.clip_with_canvas_winding_rule(self.fill_rule);
+        self.layer_stack.push(LayerKind::Clip);
+    }
+
+    fn set_filter_effect(&mut self, filter: Filter) {
+        self.ctx.save();
+        self.ctx
+            .set_filter(&canvas_filter_string(&PreparedFilter::new(
+                &filter,
+                &self.current_transform,
+            )));
+        self.layer_stack.push(LayerKind::Filter);
+    }
+
+    fn pop_clip_path(&mut self) {
+        if self.clip_depth > 0 {
+            self.ctx.restore();
+            self.clip_depth -= 1;
+        }
+    }
+
+    fn pop_layer(&mut self) {
+        if self.layer_stack.pop().is_some() {
+            self.ctx.restore();
+        }
+    }
+
+    fn draw_text(
+        &mut self,
+        font: &FontData,
+        font_size: f32,
+        hint: bool,
+        text: &str,
+        x: f32,
+        y: f32,
+    ) {
+        let _ = font;
+        let _ = hint;
+        self.apply_fill_style();
+        self.ctx.set_font(&format!("{font_size}px sans-serif"));
+        self.ctx.set_text_baseline("alphabetic");
+        let _ = self.ctx.fill_text(text, x as f64, y as f64);
+    }
+
+    fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool) {
+        let Some(uploaded) = self.resolve_image(&image) else {
+            return;
+        };
+        self.draw_uploaded_image(uploaded, rect, bilinear, 1.0);
+    }
+
+    fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
+        let may_have_opacities = pixmap.may_have_opacities();
+        let uploaded = UploadedImage::from_pixmap(pixmap);
+        let id = ImageId::new(self.uploaded_images.len() as u32);
+        self.uploaded_images.push(uploaded);
+        ImageSource::opaque_id_with_opacity_hint(id, may_have_opacities)
     }
 }
 

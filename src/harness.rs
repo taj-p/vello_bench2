@@ -7,7 +7,7 @@
 
 use wasm_bindgen::JsCast;
 
-use crate::backend::{Backend, current_backend_kind};
+use crate::backend::{Backend, current_backend_kind, new_backend};
 use crate::scenes::{self, BenchScene, ParamId, SceneId, scene_index};
 use vello_common::kurbo::Affine;
 use web_sys::HtmlCanvasElement;
@@ -85,7 +85,7 @@ pub(crate) struct BenchHarness {
     run_pos: usize,
     bench_scene: Option<Box<dyn BenchScene>>,
     bench_canvas: Option<HtmlCanvasElement>,
-    bench_backend: Option<Backend>,
+    bench_backend: Option<Box<dyn Backend>>,
 }
 
 impl std::fmt::Debug for BenchHarness {
@@ -163,16 +163,16 @@ impl BenchHarness {
 
                 let canvas = self.bench_canvas.as_ref().unwrap();
                 self.bench_backend =
-                    Some(Backend::new(canvas, width, height, current_backend_kind()));
+                    Some(new_backend(canvas, width, height, current_backend_kind()));
                 let be = self.bench_backend.as_mut().unwrap();
-                render_one(scene, be, width, height, perf.now());
+                render_one(scene, be.as_mut(), width, height, perf.now());
                 be.sync();
                 events.push(HarnessEvent::ScreenshotReady);
 
                 let t0 = perf.now();
                 let mut frames = 0_usize;
                 while perf.now() - t0 < self.warmup_ms {
-                    render_one(scene, be, width, height, perf.now());
+                    render_one(scene, be.as_mut(), width, height, perf.now());
                     be.sync();
                     frames += 1;
                 }
@@ -190,7 +190,7 @@ impl BenchHarness {
                 let be = self.bench_backend.as_mut().unwrap();
                 let t0 = perf.now();
                 for _ in 0..target_iters {
-                    render_one(scene, be, width, height, perf.now());
+                    render_one(scene, be.as_mut(), width, height, perf.now());
                     be.sync();
                 }
                 let total_ms = (perf.now() - t0).max(0.0);
@@ -252,7 +252,7 @@ pub(crate) fn scaled_count(calibrated_value: usize, preset: u32) -> usize {
 
 fn render_one(
     bench_scene: &mut dyn BenchScene,
-    backend: &mut Backend,
+    backend: &mut dyn Backend,
     width: u32,
     height: u32,
     time: f64,
@@ -291,17 +291,17 @@ pub fn run_single_bench(
     let scene = scene.as_mut();
     apply_params(scene, def.params, def.scale, preset);
 
-    let mut be = Backend::new(&canvas, width, height, current_backend_kind());
+    let mut be = new_backend(&canvas, width, height, current_backend_kind());
     let perf = web_sys::window().unwrap().performance().unwrap();
 
     // Warmup: render frames for warmup_ms to calibrate iteration count.
-    render_one(scene, &mut be, width, height, perf.now());
+    render_one(scene, be.as_mut(), width, height, perf.now());
     be.sync();
 
     let t0 = perf.now();
     let mut frames = 0_usize;
     while perf.now() - t0 < warmup_ms {
-        render_one(scene, &mut be, width, height, perf.now());
+        render_one(scene, be.as_mut(), width, height, perf.now());
         be.sync();
         frames += 1;
     }
@@ -312,7 +312,7 @@ pub fn run_single_bench(
     // Measurement.
     let t0 = perf.now();
     for _ in 0..target_iters {
-        render_one(scene, &mut be, width, height, perf.now());
+        render_one(scene, be.as_mut(), width, height, perf.now());
         be.sync();
     }
     let total_ms = (perf.now() - t0).max(0.0);

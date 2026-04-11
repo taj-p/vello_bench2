@@ -8,7 +8,7 @@ mod strokes;
 mod svg;
 mod text;
 
-use crate::backend::{BackendCapabilities, Renderer};
+use crate::backend::{Backend, BackendCapabilities};
 pub use clip::ClipScene;
 pub use filter_layers::FilterLayersScene;
 pub use polyline::PolylineScene;
@@ -202,7 +202,7 @@ pub trait BenchScene {
     /// Scenes should compose it with their own transforms.
     fn render(
         &mut self,
-        backend: &mut dyn Renderer,
+        backend: &mut dyn Backend,
         width: u32,
         height: u32,
         time: f64,

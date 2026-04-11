@@ -275,7 +275,7 @@ impl Ui {
         let benchmark_view = div(document);
         class(
             &benchmark_view,
-            "fixed inset-x-0 bottom-0 top-20 z-20 hidden overflow-y-auto px-3 pb-4 pt-2 lg:top-24 lg:px-6 lg:pb-6",
+            "fixed inset-x-0 bottom-0 top-32 z-20 hidden overflow-y-auto px-3 pb-4 pt-2 sm:top-20 lg:top-24 lg:px-6 lg:pb-6",
         );
 
         let bench_layout = div(document);
@@ -1229,13 +1229,13 @@ fn build_top_bar(
     let top_bar = div(document);
     class(
         &top_bar,
-        "pointer-events-none fixed inset-x-0 top-0 z-[80] h-0",
+        "pointer-events-none fixed inset-x-3 top-3 z-[80] flex flex-col items-start gap-3 sm:inset-x-0 sm:top-0 sm:block",
     );
 
     let nav_group = div(document);
     class(
         &nav_group,
-        "pointer-events-auto fixed left-3 top-3 flex h-11 items-center gap-4 border border-white/10 bg-slate-950/88 px-4 lg:left-4 lg:top-4",
+        "pointer-events-auto flex h-11 items-center gap-4 border border-white/10 bg-slate-950/88 px-4 sm:fixed sm:left-3 sm:top-3 lg:left-4 lg:top-4",
     );
 
     let sidebar_toggle_btn = div(document);
@@ -1263,7 +1263,7 @@ fn build_top_bar(
     let controls_group = div(document);
     class(
         &controls_group,
-        "pointer-events-auto fixed right-3 top-3 flex h-11 items-center gap-4 border border-white/10 bg-slate-950/88 px-4 lg:right-4 lg:top-4",
+        "pointer-events-auto flex h-11 max-w-full items-center gap-3 border border-white/10 bg-slate-950/88 px-4 sm:fixed sm:right-3 sm:top-3 lg:right-4 lg:top-4",
     );
 
     let has_toggle = js_sys::Reflect::get(&js_sys::global(), &"__vello_toggle_simd".into())
@@ -1348,7 +1348,7 @@ fn build_top_bar(
     select_style(&renderer_select);
     class(
         &renderer_select,
-        "ml-2 w-auto shrink-0 border border-white/10 bg-slate-950/80 px-3 py-1 text-sm text-slate-100",
+        "w-auto max-w-[9rem] shrink border border-white/10 bg-slate-950/80 px-3 py-1 text-sm text-slate-100 sm:ml-2 sm:max-w-none sm:shrink-0",
     );
     for kind in BackendKind::ALL {
         let opt = document.create_element("option").unwrap();
@@ -1387,7 +1387,7 @@ fn build_interactive_view(
     let sidebar = div(document);
     class(
         &sidebar,
-        "pointer-events-auto fixed bottom-0 left-0 top-16 z-20 flex w-[240px] flex-col overflow-y-auto border-r border-white/10 bg-slate-950/58 px-3 py-4 transition-transform duration-200 lg:top-20 lg:w-[220px]",
+        "pointer-events-auto fixed bottom-0 left-0 top-28 z-20 flex w-[240px] flex-col overflow-y-auto border-r border-white/10 bg-slate-950/58 px-3 py-4 transition-transform duration-200 sm:top-16 lg:top-20 lg:w-[220px]",
     );
 
     let viewport_label = div(document);
@@ -1465,7 +1465,7 @@ fn build_timing_overlay(document: &Document) -> (HtmlElement, HtmlElement, HtmlE
     let timing_wrap = div(document);
     class(
         &timing_wrap,
-        "pointer-events-auto fixed right-3 top-[4.5rem] z-[70] hidden items-start lg:right-4 lg:top-24",
+        "pointer-events-auto fixed right-3 top-[7.5rem] z-[70] hidden items-start sm:top-[4.5rem] lg:right-4 lg:top-24",
     );
 
     let top_timing_label = div(document);

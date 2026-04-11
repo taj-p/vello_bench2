@@ -12,7 +12,7 @@ use web_sys::{
     WebGlUniformLocation,
 };
 
-use crate::backend::layout_text_glyphs;
+use crate::backend::{Backend, BackendKind, layout_text_glyphs};
 use crate::capability::CapabilityProfile;
 use crate::scenes::{ParamId, SceneId};
 
@@ -109,16 +109,30 @@ impl BackendImpl {
         }
     }
 
-    pub fn reset(&mut self) {
+    fn draw_glyphs(&mut self, font: &FontData, font_size: f32, hint: bool, glyphs: &[Glyph]) {
+        self.ctx
+            .glyph_run(font)
+            .font_size(font_size)
+            .hint(hint)
+            .fill_glyphs(glyphs.iter().copied());
+    }
+}
+
+impl Backend for BackendImpl {
+    fn kind(&self) -> BackendKind {
+        BackendKind::Cpu
+    }
+
+    fn reset(&mut self) {
         self.ctx.reset();
     }
 
-    pub fn render_offscreen(&mut self) {
+    fn render_offscreen(&mut self) {
         self.ctx.flush();
         self.ctx.render_to_pixmap(&mut self.target);
     }
 
-    pub fn blit(&mut self) {
+    fn blit(&mut self) {
         let bytes: &[u8] = bytemuck::cast_slice(self.target.data());
 
         self.gl.use_program(Some(&self.program));
@@ -149,96 +163,84 @@ impl BackendImpl {
         self.gl.draw_arrays(GL::TRIANGLE_STRIP, 0, 4);
     }
 
-    pub fn is_cpu(&self) -> bool {
+    fn is_cpu(&self) -> bool {
         true
     }
 
-    pub fn supports_encode_timing(&self) -> bool {
+    fn supports_encode_timing(&self) -> bool {
         true
     }
 
-    pub fn sync(&self) {}
+    fn sync(&self) {}
 
-    pub fn resize(&mut self, w: u32, h: u32) {
+    fn resize(&mut self, w: u32, h: u32) {
         self.width = w as u16;
         self.height = h as u16;
         self.ctx = vello_cpu::RenderContext::new(w as u16, h as u16);
         self.target = Pixmap::new(self.width, self.height);
     }
 
-    pub fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
-        ImageSource::Pixmap(Arc::new(pixmap))
-    }
-
-    pub fn set_paint(&mut self, paint: PaintType) {
+    fn set_paint(&mut self, paint: PaintType) {
         self.ctx.set_paint(paint);
     }
 
-    pub fn set_transform(&mut self, transform: Affine) {
+    fn set_transform(&mut self, transform: Affine) {
         self.ctx.set_transform(transform);
     }
 
-    pub fn reset_transform(&mut self) {
+    fn reset_transform(&mut self) {
         self.ctx.reset_transform();
     }
 
-    pub fn set_stroke(&mut self, stroke: Stroke) {
+    fn set_stroke(&mut self, stroke: Stroke) {
         self.ctx.set_stroke(stroke);
     }
 
-    pub fn set_paint_transform(&mut self, transform: Affine) {
+    fn set_paint_transform(&mut self, transform: Affine) {
         self.ctx.set_paint_transform(transform);
     }
 
-    pub fn reset_paint_transform(&mut self) {
+    fn reset_paint_transform(&mut self) {
         self.ctx.reset_paint_transform();
     }
 
-    pub fn set_fill_rule(&mut self, fill: Fill) {
+    fn set_fill_rule(&mut self, fill: Fill) {
         self.ctx.set_fill_rule(fill);
     }
 
-    pub fn fill_rect(&mut self, rect: &Rect) {
+    fn fill_rect(&mut self, rect: &Rect) {
         self.ctx.fill_rect(rect);
     }
 
-    pub fn fill_path(&mut self, path: &BezPath) {
+    fn fill_path(&mut self, path: &BezPath) {
         self.ctx.fill_path(path);
     }
 
-    pub fn stroke_path(&mut self, path: &BezPath) {
+    fn stroke_path(&mut self, path: &BezPath) {
         self.ctx.stroke_path(path);
     }
 
-    pub fn push_clip_path(&mut self, path: &BezPath) {
+    fn push_clip_path(&mut self, path: &BezPath) {
         self.ctx.push_clip_path(path);
     }
 
-    pub fn push_clip_layer(&mut self, path: &BezPath) {
+    fn push_clip_layer(&mut self, path: &BezPath) {
         self.ctx.push_clip_layer(path);
     }
 
-    pub fn set_filter_effect(&mut self, filter: Filter) {
+    fn set_filter_effect(&mut self, filter: Filter) {
         self.ctx.push_filter_layer(filter);
     }
 
-    pub fn pop_clip_path(&mut self) {
+    fn pop_clip_path(&mut self) {
         self.ctx.pop_clip_path();
     }
 
-    pub fn pop_layer(&mut self) {
+    fn pop_layer(&mut self) {
         self.ctx.pop_layer();
     }
 
-    fn draw_glyphs(&mut self, font: &FontData, font_size: f32, hint: bool, glyphs: &[Glyph]) {
-        self.ctx
-            .glyph_run(font)
-            .font_size(font_size)
-            .hint(hint)
-            .fill_glyphs(glyphs.iter().copied());
-    }
-
-    pub fn draw_text(
+    fn draw_text(
         &mut self,
         font: &FontData,
         font_size: f32,
@@ -251,5 +253,9 @@ impl BackendImpl {
         self.draw_glyphs(font, font_size, hint, &glyphs);
     }
 
-    pub fn draw_image(&mut self, _image: ImageSource, _rect: &Rect, _bilinear: bool) {}
+    fn draw_image(&mut self, _image: ImageSource, _rect: &Rect, _bilinear: bool) {}
+
+    fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
+        ImageSource::Pixmap(Arc::new(pixmap))
+    }
 }
