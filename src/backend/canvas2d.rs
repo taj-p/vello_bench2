@@ -1,7 +1,6 @@
 use js_sys::{Function, Reflect};
 use vello_common::filter::PreparedFilter;
 use vello_common::filter_effects::Filter;
-use vello_common::glyph::Glyph;
 use vello_common::kurbo::{Affine, BezPath, PathEl, Rect, Stroke};
 use vello_common::paint::{ImageId, ImageSource, PaintType};
 use vello_common::peniko::color::Srgb;
@@ -281,7 +280,7 @@ impl BackendImpl {
         self.layer_stack.push(LayerKind::Clip);
     }
 
-    pub fn push_filter_layer(&mut self, filter: Filter) {
+    pub fn set_filter_effect(&mut self, filter: Filter) {
         self.ctx.save();
         self.ctx
             .set_filter(&canvas_filter_string(&PreparedFilter::new(

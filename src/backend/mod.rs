@@ -94,7 +94,7 @@ pub trait Renderer {
     fn stroke_path(&mut self, path: &BezPath);
     fn push_clip_path(&mut self, path: &BezPath);
     fn push_clip_layer(&mut self, path: &BezPath);
-    fn push_filter_effect(&mut self, filter: Filter);
+    fn set_filter_effect(&mut self, filter: Filter);
     fn pop_clip_path(&mut self);
     fn pop_layer(&mut self);
     fn draw_text(
@@ -382,12 +382,12 @@ impl Renderer for Backend {
         }
     }
 
-    fn push_filter_effect(&mut self, filter: Filter) {
+    fn set_filter_effect(&mut self, filter: Filter) {
         match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.push_filter_layer(filter),
-            BackendImpl::Cpu(inner) => inner.push_filter_layer(filter),
-            BackendImpl::Pathfinder(inner) => inner.push_filter_layer(filter),
-            BackendImpl::Canvas2d(inner) => inner.push_filter_layer(filter),
+            BackendImpl::Hybrid(inner) => inner.set_filter_effect(filter),
+            BackendImpl::Cpu(inner) => inner.set_filter_effect(filter),
+            BackendImpl::Pathfinder(inner) => inner.set_filter_effect(filter),
+            BackendImpl::Canvas2d(inner) => inner.set_filter_effect(filter),
         }
     }
 

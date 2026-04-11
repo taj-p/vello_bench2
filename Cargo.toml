@@ -31,6 +31,7 @@ pathfinder_content = { git = "https://github.com/servo/pathfinder", branch = "ma
 pathfinder_geometry = { git = "https://github.com/servo/pathfinder", branch = "main" }
 pathfinder_renderer = { git = "https://github.com/servo/pathfinder", branch = "main" }
 pathfinder_resources = { git = "https://github.com/servo/pathfinder", branch = "main" }
+pathfinder_simd = { git = "https://github.com/servo/pathfinder", branch = "main" }
 pathfinder_webgl = { git = "https://github.com/servo/pathfinder", branch = "main" }
 js-sys = "0.3.83"
 wasm-bindgen = "=0.2.114"

@@ -2,20 +2,25 @@ use pathfinder_canvas::{
     Canvas, CanvasFontContext, CanvasRenderingContext2D, ColorU, FillRule, ImageData, LineCap,
     LineJoin, Path2D, RectF,
 };
+use pathfinder_content::gradient::Gradient as PathfinderGradient;
 use pathfinder_content::pattern::{Image as PathfinderImage, Pattern};
+use pathfinder_geometry::line_segment::LineSegment2F;
 use pathfinder_geometry::transform2d::Transform2F;
 use pathfinder_geometry::vector::{Vector2F, vec2f, vec2i};
 use pathfinder_renderer::concurrent::executor::SequentialExecutor;
 use pathfinder_renderer::gpu::options::{DestFramebuffer, RendererMode, RendererOptions};
 use pathfinder_renderer::gpu::renderer::Renderer as PathfinderRenderer;
 use pathfinder_renderer::options::BuildOptions;
+use pathfinder_renderer::scene::Scene;
 use pathfinder_resources::embedded::EmbeddedResourceLoader;
+use pathfinder_simd::default::F32x2;
 use pathfinder_webgl::WebGlDevice;
 use vello_common::filter_effects::Filter;
-use vello_common::glyph::Glyph;
 use vello_common::kurbo::{Affine, BezPath, PathEl, Rect, Stroke};
 use vello_common::paint::{ImageId, ImageSource, PaintType};
-use vello_common::peniko::{Fill, FontData};
+use vello_common::peniko::{
+    Fill, FontData, Gradient, GradientKind, LinearGradientPosition, RadialGradientPosition,
+};
 use vello_common::pixmap::Pixmap;
 use wasm_bindgen::JsCast;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
@@ -25,8 +30,8 @@ use crate::scenes::{ParamId, SceneId};
 
 const UNSUPPORTED_VALUES: &[UnsupportedParamValue] = &[UnsupportedParamValue::new(
     SceneId::Rect,
-    ParamId::PaintMode,
-    1,
+    ParamId::GradientShape,
+    2,
 )];
 
 pub(crate) const CAPABILITIES: CapabilityProfile = CapabilityProfile::none()
@@ -47,6 +52,8 @@ pub(crate) const CAPABILITIES: CapabilityProfile = CapabilityProfile::none()
             ParamId::ImageFilter,
             ParamId::ImageOpaque,
             ParamId::UseDrawImage,
+            ParamId::GradientShape,
+            ParamId::DynamicGradient,
         ],
     )
     .allow_params(
@@ -192,7 +199,11 @@ impl BackendImpl {
         self.ctx.push_clip_layer(path);
     }
 
-    pub fn push_filter_layer(&mut self, _filter: Filter) {}
+    pub fn set_filter_effect(&mut self, filter: Filter) {
+        let _ = filter;
+        // Pathfinder filter support is intentionally disabled. The shadow-based
+        // approximation was visually incorrect and made FilterLayers look buggy.
+    }
 
     pub fn pop_clip_path(&mut self) {
         self.ctx.pop_clip_path();
@@ -211,6 +222,9 @@ impl BackendImpl {
         _x: f32,
         _y: f32,
     ) {
+        // Pathfinder text stays disabled in the wasm build. Enabling `pathfinder_canvas`
+        // `pf-text` support pulls in freetype/harfbuzz native dependencies, which fail
+        // to build for our `wasm32-unknown-unknown` serve/build pipeline.
     }
 
     pub fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool) {
@@ -232,6 +246,7 @@ struct DrawContext {
 #[derive(Clone)]
 enum PaintState {
     Solid(ColorU),
+    Gradient(PathfinderGradient),
     Image(ImagePaint),
 }
 
@@ -275,7 +290,7 @@ impl DrawContext {
         self.reset();
     }
 
-    fn take_scene(&mut self) -> pathfinder_canvas::Scene {
+    fn take_scene(&mut self) -> Scene {
         self.canvas.canvas_mut().take_scene()
     }
 
@@ -285,6 +300,10 @@ impl DrawContext {
                 let [r, g, b, a] = color.to_rgba8().to_u8_array();
                 PaintState::Solid(ColorU::new(r, g, b, a))
             }
+            PaintType::Gradient(gradient) => match to_pathfinder_gradient(&gradient) {
+                Some(gradient) => PaintState::Gradient(gradient),
+                None => PaintState::Solid(ColorU::transparent_black()),
+            },
             PaintType::Image(image) => {
                 let Some(uploaded) = resolve_uploaded_image(uploaded_images, &image.image) else {
                     return;
@@ -298,7 +317,6 @@ impl DrawContext {
                     alpha: image.sampler.alpha,
                 })
             }
-            PaintType::Gradient(_) => PaintState::Solid(ColorU::transparent_black()),
         };
     }
 
@@ -350,6 +368,10 @@ impl DrawContext {
                 self.canvas.set_fill_style(*fill_color);
                 self.canvas.fill_rect(rectf);
             }
+            PaintState::Gradient(gradient) => {
+                self.canvas.set_fill_style(gradient.clone());
+                self.canvas.fill_rect(rectf);
+            }
             PaintState::Image(image) => {
                 draw_pathfinder_image(&mut self.canvas, image, rectf);
             }
@@ -357,16 +379,30 @@ impl DrawContext {
     }
 
     fn fill_path(&mut self, path: &BezPath) {
-        if let PaintState::Solid(fill_color) = self.current_paint {
-            self.canvas.set_fill_style(fill_color);
-            self.canvas.fill_path(path_to_path2d(path), self.fill_rule);
+        match &self.current_paint {
+            PaintState::Solid(fill_color) => {
+                self.canvas.set_fill_style(*fill_color);
+                self.canvas.fill_path(path_to_path2d(path), self.fill_rule);
+            }
+            PaintState::Gradient(gradient) => {
+                self.canvas.set_fill_style(gradient.clone());
+                self.canvas.fill_path(path_to_path2d(path), self.fill_rule);
+            }
+            PaintState::Image(_) => {}
         }
     }
 
     fn stroke_path(&mut self, path: &BezPath) {
-        if let PaintState::Solid(fill_color) = self.current_paint {
-            self.canvas.set_stroke_style(fill_color);
-            self.canvas.stroke_path(path_to_path2d(path));
+        match &self.current_paint {
+            PaintState::Solid(fill_color) => {
+                self.canvas.set_stroke_style(*fill_color);
+                self.canvas.stroke_path(path_to_path2d(path));
+            }
+            PaintState::Gradient(gradient) => {
+                self.canvas.set_stroke_style(gradient.clone());
+                self.canvas.stroke_path(path_to_path2d(path));
+            }
+            PaintState::Image(_) => {}
         }
     }
 
@@ -422,6 +458,38 @@ fn make_canvas_context(
     font_context: CanvasFontContext,
 ) -> CanvasRenderingContext2D {
     Canvas::new(Vector2F::new(width as f32, height as f32)).get_context_2d(font_context)
+}
+
+fn to_pathfinder_gradient(gradient: &Gradient) -> Option<PathfinderGradient> {
+    let mut out = match gradient.kind {
+        GradientKind::Linear(LinearGradientPosition { start, end }) => {
+            PathfinderGradient::linear(LineSegment2F::new(
+                vec2f(start.x as f32, start.y as f32),
+                vec2f(end.x as f32, end.y as f32),
+            ))
+        }
+        GradientKind::Radial(RadialGradientPosition {
+            start_center,
+            start_radius,
+            end_center,
+            end_radius,
+        }) => PathfinderGradient::radial(
+            LineSegment2F::new(
+                vec2f(start_center.x as f32, start_center.y as f32),
+                vec2f(end_center.x as f32, end_center.y as f32),
+            ),
+            F32x2::new(start_radius, end_radius),
+        ),
+        GradientKind::Sweep(_) => return None,
+    };
+    for stop in gradient.stops.0.iter() {
+        let color = stop
+            .color
+            .to_alpha_color::<vello_common::peniko::color::Srgb>();
+        let [r, g, b, a] = color.to_rgba8().to_u8_array();
+        out.add_color_stop(ColorU::new(r, g, b, a), stop.offset as f32);
+    }
+    Some(out)
 }
 
 impl UploadedImage {

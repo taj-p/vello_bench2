@@ -1681,6 +1681,7 @@ dependencies = [
  "pathfinder_geometry",
  "pathfinder_renderer",
  "pathfinder_resources",
+ "pathfinder_simd",
  "pathfinder_webgl",
  "serde",
  "serde_json",

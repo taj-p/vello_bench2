@@ -218,7 +218,7 @@ impl BackendImpl {
         self.ctx.push_clip_layer(path);
     }
 
-    pub fn push_filter_layer(&mut self, filter: Filter) {
+    pub fn set_filter_effect(&mut self, filter: Filter) {
         self.ctx.push_filter_layer(filter);
     }
 
