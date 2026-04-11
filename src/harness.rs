@@ -92,6 +92,9 @@ pub(crate) struct BenchHarness {
     bench_scene: Option<Box<dyn BenchScene>>,
     bench_canvas: Option<HtmlCanvasElement>,
     bench_backend: Option<Box<dyn Backend>>,
+    backend_kind: Option<crate::backend::BackendKind>,
+    backend_width: u32,
+    backend_height: u32,
     resources: ResourceStore,
 }
 
@@ -114,6 +117,9 @@ impl BenchHarness {
             bench_scene: None,
             bench_canvas: None,
             bench_backend: None,
+            backend_kind: None,
+            backend_width: 0,
+            backend_height: 0,
             resources: ResourceStore::new(),
         }
     }
@@ -130,9 +136,7 @@ impl BenchHarness {
         self.results.clear();
         self.run_order = selected;
         self.run_pos = 0;
-        self.bench_scene = None;
         self.bench_canvas = Some(canvas.clone());
-        self.bench_backend = None;
         if self.run_order.is_empty() {
             self.phase = Phase::Complete;
         } else {
@@ -165,13 +169,8 @@ impl BenchHarness {
             Phase::Idle | Phase::Complete => {}
             Phase::PendingBench(idx) => {
                 let def = &defs[idx];
-                self.bench_scene = Some(new_scene(def.scene_id));
+                self.prepare_bench(def, width, height);
                 let scene = self.bench_scene.as_mut().unwrap().as_mut();
-                apply_params(scene, def.params, def.scale, self.preset);
-
-                let canvas = self.bench_canvas.as_ref().unwrap();
-                self.bench_backend =
-                    Some(new_backend(canvas, width, height, current_backend_kind()));
                 let be = self.bench_backend.as_mut().unwrap();
                 render_one(scene, be.as_mut(), &mut self.resources, width, height, now);
                 self.phase = Phase::Running {
@@ -221,7 +220,6 @@ impl BenchHarness {
 
                     self.run_pos += 1;
                     if self.run_pos < self.run_order.len() {
-                        self.cleanup_current_bench();
                         self.phase = Phase::PendingBench(self.run_order[self.run_pos]);
                     } else {
                         self.phase = Phase::Complete;
@@ -241,7 +239,35 @@ impl BenchHarness {
             self.resources.clear_all(backend.as_mut());
         }
         self.bench_scene = None;
-        self.bench_backend = None;
+    }
+
+    fn prepare_bench(&mut self, def: &BenchDef, width: u32, height: u32) {
+        // Note: We reuse the renderer whenever possible. This does have the advantage
+        // that some state can leak across benchmarks (for example, if the alpha texture
+        // grows very large in one frame then all subsequent benchmarks will also be affected
+        // by that). The cleaner way would be to create a new renderer each benchmark,
+        // but taht seems to crash my Samsung Tablet very easily (either because of
+        // OOM or WebGL context loss), haven't investigated why yet.
+        let kind = current_backend_kind();
+        let needs_backend_rebuild = self.bench_backend.is_none()
+            || self.backend_kind != Some(kind)
+            || self.backend_width != width
+            || self.backend_height != height;
+        if needs_backend_rebuild {
+            self.cleanup_current_bench();
+            let canvas = self.bench_canvas.as_ref().unwrap();
+            self.bench_backend = Some(new_backend(canvas, width, height, kind));
+            self.backend_kind = Some(kind);
+            self.backend_width = width;
+            self.backend_height = height;
+        }
+
+        self.bench_scene = Some(new_scene(def.scene_id));
+        if let Some(backend) = self.bench_backend.as_mut() {
+            self.resources.clear_all(backend.as_mut());
+        }
+        let scene = self.bench_scene.as_mut().unwrap().as_mut();
+        apply_params(scene, def.params, def.scale, self.preset);
     }
 }
 
