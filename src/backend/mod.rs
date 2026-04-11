@@ -89,7 +89,7 @@ pub trait Renderer {
     fn stroke_path(&mut self, path: &BezPath);
     fn push_clip_path(&mut self, path: &BezPath);
     fn push_clip_layer(&mut self, path: &BezPath);
-    fn push_filter_layer(&mut self, filter: Filter);
+    fn push_filter_effect(&mut self, filter: Filter);
     fn pop_clip_path(&mut self);
     fn pop_layer(&mut self);
     fn fill_glyphs(&mut self, font: &FontData, font_size: f32, hint: bool, glyphs: &[Glyph]);
@@ -378,7 +378,7 @@ impl Renderer for Backend {
         }
     }
 
-    fn push_filter_layer(&mut self, filter: Filter) {
+    fn push_filter_effect(&mut self, filter: Filter) {
         match &mut self.inner {
             BackendImpl::Hybrid(inner) => inner.push_filter_layer(filter),
             BackendImpl::Cpu(inner) => inner.push_filter_layer(filter),

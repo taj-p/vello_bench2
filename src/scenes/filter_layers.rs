@@ -251,7 +251,7 @@ impl BenchScene for FilterLayersScene {
                 rect_state.x + size,
                 rect_state.y + size,
             );
-            backend.push_filter_layer(make_filter(
+            backend.push_filter_effect(make_filter(
                 filter_kind,
                 blur_std_deviation,
                 shadow_dx,
