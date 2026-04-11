@@ -1,6 +1,6 @@
 use pathfinder_canvas::{
-    Canvas, CanvasFontContext, CanvasRenderingContext2D, ColorF, ColorU, FillRule, ImageData,
-    LineCap, LineJoin, Path2D, RectF,
+    Canvas, CanvasFontContext, CanvasRenderingContext2D, ColorU, FillRule, ImageData, LineCap,
+    LineJoin, Path2D, RectF,
 };
 use pathfinder_content::pattern::{Image as PathfinderImage, Pattern};
 use pathfinder_geometry::transform2d::Transform2F;
@@ -97,7 +97,7 @@ impl BackendImpl {
         let mode = RendererMode::default_for_device(&device);
         let options = RendererOptions {
             dest: DestFramebuffer::full_window(framebuffer_size),
-            background_color: Some(ColorF::new(17.0 / 255.0, 17.0 / 255.0, 27.0 / 255.0, 1.0)),
+            background_color: None,
             ..RendererOptions::default()
         };
         let loader = EmbeddedResourceLoader::new();
@@ -113,14 +113,12 @@ impl BackendImpl {
     }
 
     pub fn render_offscreen(&mut self) {
-        if let Some(canvas) = self.ctx.canvas.take() {
-            let mut scene = canvas.into_canvas().into_scene();
-            scene.build_and_render(
-                &mut self.renderer,
-                BuildOptions::default(),
-                SequentialExecutor,
-            );
-        }
+        let mut scene = self.ctx.take_scene();
+        scene.build_and_render(
+            &mut self.renderer,
+            BuildOptions::default(),
+            SequentialExecutor,
+        );
     }
 
     pub fn blit(&mut self) {}
@@ -136,8 +134,9 @@ impl BackendImpl {
     pub fn sync(&self) {}
 
     pub fn resize(&mut self, w: u32, h: u32) {
-        self.ctx = DrawContext::new(w as u16, h as u16);
+        self.ctx.resize(w as u16, h as u16);
         self.renderer.options_mut().dest = DestFramebuffer::full_window(vec2i(w as i32, h as i32));
+        self.renderer.options_mut().background_color = None;
         self.renderer.dest_framebuffer_size_changed();
     }
 
@@ -223,7 +222,8 @@ impl BackendImpl {
 struct DrawContext {
     width: u16,
     height: u16,
-    canvas: Option<CanvasRenderingContext2D>,
+    font_context: CanvasFontContext,
+    canvas: CanvasRenderingContext2D,
     current_paint: PaintState,
     fill_rule: FillRule,
     clip_depth: usize,
@@ -248,10 +248,12 @@ struct UploadedImage {
 
 impl DrawContext {
     fn new(width: u16, height: u16) -> Self {
+        let font_context = CanvasFontContext::from_system_source();
         let mut ctx = Self {
             width,
             height,
-            canvas: None,
+            canvas: make_canvas_context(width, height, font_context.clone()),
+            font_context,
             current_paint: PaintState::Solid(ColorU::black()),
             fill_rule: FillRule::Winding,
             clip_depth: 0,
@@ -261,13 +263,20 @@ impl DrawContext {
     }
 
     fn reset(&mut self) {
-        let font_context = CanvasFontContext::from_system_source();
-        self.canvas = Some(
-            Canvas::new(Vector2F::new(self.width as f32, self.height as f32))
-                .get_context_2d(font_context),
-        );
+        self.canvas = make_canvas_context(self.width, self.height, self.font_context.clone());
+        self.current_paint = PaintState::Solid(ColorU::black());
         self.fill_rule = FillRule::Winding;
         self.clip_depth = 0;
+    }
+
+    fn resize(&mut self, width: u16, height: u16) {
+        self.width = width;
+        self.height = height;
+        self.reset();
+    }
+
+    fn take_scene(&mut self) -> pathfinder_canvas::Scene {
+        self.canvas.canvas_mut().take_scene()
     }
 
     fn set_paint(&mut self, paint: PaintType, uploaded_images: &[UploadedImage]) {
@@ -294,23 +303,19 @@ impl DrawContext {
     }
 
     fn set_transform(&mut self, transform: Affine) {
-        if let Some(canvas) = self.canvas.as_mut() {
-            let c = transform.as_coeffs();
-            canvas.set_transform(&Transform2F::row_major(
-                c[0] as f32,
-                c[2] as f32,
-                c[4] as f32,
-                c[1] as f32,
-                c[3] as f32,
-                c[5] as f32,
-            ));
-        }
+        let c = transform.as_coeffs();
+        self.canvas.set_transform(&Transform2F::row_major(
+            c[0] as f32,
+            c[2] as f32,
+            c[4] as f32,
+            c[1] as f32,
+            c[3] as f32,
+            c[5] as f32,
+        ));
     }
 
     fn reset_transform(&mut self) {
-        if let Some(canvas) = self.canvas.as_mut() {
-            canvas.reset_transform();
-        }
+        self.canvas.reset_transform();
     }
 
     fn set_fill_rule(&mut self, fill: Fill) {
@@ -321,64 +326,54 @@ impl DrawContext {
     }
 
     fn set_stroke(&mut self, stroke: Stroke) {
-        if let Some(canvas) = self.canvas.as_mut() {
-            canvas.set_line_width(stroke.width as f32);
-            canvas.set_miter_limit(stroke.miter_limit as f32);
-            canvas.set_line_cap(match stroke.start_cap {
-                vello_common::kurbo::Cap::Butt => LineCap::Butt,
-                vello_common::kurbo::Cap::Square => LineCap::Square,
-                vello_common::kurbo::Cap::Round => LineCap::Round,
-            });
-            canvas.set_line_join(match stroke.join {
-                vello_common::kurbo::Join::Bevel => LineJoin::Bevel,
-                vello_common::kurbo::Join::Miter => LineJoin::Miter,
-                vello_common::kurbo::Join::Round => LineJoin::Round,
-            });
-        }
+        self.canvas.set_line_width(stroke.width as f32);
+        self.canvas.set_miter_limit(stroke.miter_limit as f32);
+        self.canvas.set_line_cap(match stroke.start_cap {
+            vello_common::kurbo::Cap::Butt => LineCap::Butt,
+            vello_common::kurbo::Cap::Square => LineCap::Square,
+            vello_common::kurbo::Cap::Round => LineCap::Round,
+        });
+        self.canvas.set_line_join(match stroke.join {
+            vello_common::kurbo::Join::Bevel => LineJoin::Bevel,
+            vello_common::kurbo::Join::Miter => LineJoin::Miter,
+            vello_common::kurbo::Join::Round => LineJoin::Round,
+        });
     }
 
     fn fill_rect(&mut self, rect: &Rect) {
-        if let Some(canvas) = self.canvas.as_mut() {
-            let rectf = RectF::new(
-                Vector2F::new(rect.x0 as f32, rect.y0 as f32),
-                Vector2F::new(rect.width() as f32, rect.height() as f32),
-            );
-            match &self.current_paint {
-                PaintState::Solid(fill_color) => {
-                    canvas.set_fill_style(*fill_color);
-                    canvas.fill_rect(rectf);
-                }
-                PaintState::Image(image) => {
-                    draw_pathfinder_image(canvas, image, rectf);
-                }
+        let rectf = RectF::new(
+            Vector2F::new(rect.x0 as f32, rect.y0 as f32),
+            Vector2F::new(rect.width() as f32, rect.height() as f32),
+        );
+        match &self.current_paint {
+            PaintState::Solid(fill_color) => {
+                self.canvas.set_fill_style(*fill_color);
+                self.canvas.fill_rect(rectf);
+            }
+            PaintState::Image(image) => {
+                draw_pathfinder_image(&mut self.canvas, image, rectf);
             }
         }
     }
 
     fn fill_path(&mut self, path: &BezPath) {
-        if let Some(canvas) = self.canvas.as_mut() {
-            if let PaintState::Solid(fill_color) = self.current_paint {
-                canvas.set_fill_style(fill_color);
-                canvas.fill_path(path_to_path2d(path), self.fill_rule);
-            }
+        if let PaintState::Solid(fill_color) = self.current_paint {
+            self.canvas.set_fill_style(fill_color);
+            self.canvas.fill_path(path_to_path2d(path), self.fill_rule);
         }
     }
 
     fn stroke_path(&mut self, path: &BezPath) {
-        if let Some(canvas) = self.canvas.as_mut() {
-            if let PaintState::Solid(fill_color) = self.current_paint {
-                canvas.set_stroke_style(fill_color);
-                canvas.stroke_path(path_to_path2d(path));
-            }
+        if let PaintState::Solid(fill_color) = self.current_paint {
+            self.canvas.set_stroke_style(fill_color);
+            self.canvas.stroke_path(path_to_path2d(path));
         }
     }
 
     fn push_clip_path(&mut self, path: &BezPath) {
-        if let Some(canvas) = self.canvas.as_mut() {
-            canvas.save();
-            canvas.clip_path(path_to_path2d(path), self.fill_rule);
-            self.clip_depth += 1;
-        }
+        self.canvas.save();
+        self.canvas.clip_path(path_to_path2d(path), self.fill_rule);
+        self.clip_depth += 1;
     }
 
     fn push_clip_layer(&mut self, path: &BezPath) {
@@ -387,9 +382,7 @@ impl DrawContext {
 
     fn pop_clip_path(&mut self) {
         if self.clip_depth > 0 {
-            if let Some(canvas) = self.canvas.as_mut() {
-                canvas.restore();
-            }
+            self.canvas.restore();
             self.clip_depth -= 1;
         }
     }
@@ -408,21 +401,27 @@ impl DrawContext {
         let Some(uploaded) = resolve_uploaded_image(uploaded_images, &image) else {
             return;
         };
-        if let Some(canvas) = self.canvas.as_mut() {
-            draw_pathfinder_image(
-                canvas,
-                &ImagePaint {
-                    image: uploaded.image.clone(),
-                    bilinear,
-                    alpha: 1.0,
-                },
-                RectF::new(
-                    Vector2F::new(rect.x0 as f32, rect.y0 as f32),
-                    Vector2F::new(rect.width() as f32, rect.height() as f32),
-                ),
-            );
-        }
+        draw_pathfinder_image(
+            &mut self.canvas,
+            &ImagePaint {
+                image: uploaded.image.clone(),
+                bilinear,
+                alpha: 1.0,
+            },
+            RectF::new(
+                Vector2F::new(rect.x0 as f32, rect.y0 as f32),
+                Vector2F::new(rect.width() as f32, rect.height() as f32),
+            ),
+        );
     }
+}
+
+fn make_canvas_context(
+    width: u16,
+    height: u16,
+    font_context: CanvasFontContext,
+) -> CanvasRenderingContext2D {
+    Canvas::new(Vector2F::new(width as f32, height as f32)).get_context_2d(font_context)
 }
 
 impl UploadedImage {
