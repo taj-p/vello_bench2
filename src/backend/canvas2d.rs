@@ -304,15 +304,6 @@ impl BackendImpl {
         }
     }
 
-    pub fn fill_glyphs(
-        &mut self,
-        _font: &FontData,
-        _font_size: f32,
-        _hint: bool,
-        _glyphs: &[Glyph],
-    ) {
-    }
-
     pub fn draw_text(
         &mut self,
         _font: &FontData,

@@ -232,7 +232,7 @@ impl BackendImpl {
         self.ctx.pop_layer();
     }
 
-    pub fn fill_glyphs(&mut self, font: &FontData, font_size: f32, hint: bool, glyphs: &[Glyph]) {
+    fn draw_glyphs(&mut self, font: &FontData, font_size: f32, hint: bool, glyphs: &[Glyph]) {
         self.ctx
             .glyph_run(font)
             .font_size(font_size)
@@ -250,7 +250,7 @@ impl BackendImpl {
         y: f32,
     ) {
         let glyphs = layout_text_glyphs(font, font_size, text, x, y);
-        self.fill_glyphs(font, font_size, hint, &glyphs);
+        self.draw_glyphs(font, font_size, hint, &glyphs);
     }
 
     pub fn draw_image(&mut self, _image: ImageSource, _rect: &Rect, _bilinear: bool) {}

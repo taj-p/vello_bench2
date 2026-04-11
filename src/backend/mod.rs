@@ -92,7 +92,6 @@ pub trait Renderer {
     fn push_filter_effect(&mut self, filter: Filter);
     fn pop_clip_path(&mut self);
     fn pop_layer(&mut self);
-    fn fill_glyphs(&mut self, font: &FontData, font_size: f32, hint: bool, glyphs: &[Glyph]);
     fn draw_text(
         &mut self,
         font: &FontData,
@@ -402,15 +401,6 @@ impl Renderer for Backend {
             BackendImpl::Cpu(inner) => inner.pop_layer(),
             BackendImpl::Pathfinder(inner) => inner.pop_layer(),
             BackendImpl::Canvas2d(inner) => inner.pop_layer(),
-        }
-    }
-
-    fn fill_glyphs(&mut self, font: &FontData, font_size: f32, hint: bool, glyphs: &[Glyph]) {
-        match &mut self.inner {
-            BackendImpl::Hybrid(inner) => inner.fill_glyphs(font, font_size, hint, glyphs),
-            BackendImpl::Cpu(inner) => inner.fill_glyphs(font, font_size, hint, glyphs),
-            BackendImpl::Pathfinder(inner) => inner.fill_glyphs(font, font_size, hint, glyphs),
-            BackendImpl::Canvas2d(inner) => inner.fill_glyphs(font, font_size, hint, glyphs),
         }
     }
 
