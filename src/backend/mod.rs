@@ -19,6 +19,11 @@ use crate::scenes::{ParamId, SceneId};
 
 pub use vello_common::pixmap::Pixmap;
 
+// TODO: Unify image handling across backends around explicit uploaded image
+// handles instead of passing `ImageSource` through the renderer API. That
+// should include explicit destruction once scene-cached images are no longer
+// needed, so backends can release atlas/registry/storage resources promptly.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendKind {
     Hybrid,
