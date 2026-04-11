@@ -14,6 +14,7 @@ use vello_common::paint::{ImageSource, PaintType};
 use vello_common::peniko::{Fill, FontData};
 use web_sys::HtmlCanvasElement;
 
+use crate::capability::CapabilityProfile;
 use crate::scenes::{ParamId, SceneId};
 
 pub use vello_common::pixmap::Pixmap;
@@ -56,6 +57,15 @@ impl BackendKind {
             _ => None,
         }
     }
+
+    fn capabilities(self) -> &'static CapabilityProfile {
+        match self {
+            Self::Hybrid => &hybrid::CAPABILITIES,
+            Self::Cpu => &cpu::CAPABILITIES,
+            Self::Pathfinder => &pathfinder::CAPABILITIES,
+            Self::Canvas2d => &canvas2d::CAPABILITIES,
+        }
+    }
 }
 
 pub fn current_backend_kind() -> BackendKind {
@@ -83,7 +93,15 @@ pub trait Renderer {
     fn pop_clip_path(&mut self);
     fn pop_layer(&mut self);
     fn fill_glyphs(&mut self, font: &FontData, font_size: f32, hint: bool, glyphs: &[Glyph]);
-    fn draw_text(&mut self, font: &FontData, font_size: f32, hint: bool, text: &str, x: f32, y: f32);
+    fn draw_text(
+        &mut self,
+        font: &FontData,
+        font_size: f32,
+        hint: bool,
+        text: &str,
+        x: f32,
+        y: f32,
+    );
     fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool);
     fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource;
 }
@@ -106,7 +124,11 @@ pub fn layout_text_glyphs(
     let mut glyphs = Vec::with_capacity(text.len());
     for ch in text.chars() {
         let gid = charmap.map(ch).unwrap_or_default();
-        glyphs.push(Glyph { id: gid.to_u32(), x: pen_x, y });
+        glyphs.push(Glyph {
+            id: gid.to_u32(),
+            x: pen_x,
+            y,
+        });
         pen_x += glyph_metrics.advance_width(gid).unwrap_or_default();
     }
     glyphs
@@ -119,30 +141,17 @@ pub struct BackendCapabilities {
 
 impl BackendCapabilities {
     pub fn supports_scene(self, scene_id: SceneId) -> bool {
-        match self.kind {
-            BackendKind::Hybrid => hybrid::supports_scene(scene_id),
-            BackendKind::Cpu => cpu::supports_scene(scene_id),
-            BackendKind::Pathfinder => pathfinder::supports_scene(scene_id),
-            BackendKind::Canvas2d => canvas2d::supports_scene(scene_id),
-        }
+        self.kind.capabilities().supports_scene(scene_id)
     }
 
     pub fn supports_param(self, scene_id: SceneId, param: ParamId) -> bool {
-        match self.kind {
-            BackendKind::Hybrid => hybrid::supports_param(scene_id, param),
-            BackendKind::Cpu => cpu::supports_param(scene_id, param),
-            BackendKind::Pathfinder => pathfinder::supports_param(scene_id, param),
-            BackendKind::Canvas2d => canvas2d::supports_param(scene_id, param),
-        }
+        self.kind.capabilities().supports_param(scene_id, param)
     }
 
     pub fn supports_param_value(self, scene_id: SceneId, param: ParamId, value: f64) -> bool {
-        match self.kind {
-            BackendKind::Hybrid => hybrid::supports_param_value(scene_id, param, value),
-            BackendKind::Cpu => cpu::supports_param_value(scene_id, param, value),
-            BackendKind::Pathfinder => pathfinder::supports_param_value(scene_id, param, value),
-            BackendKind::Canvas2d => canvas2d::supports_param_value(scene_id, param, value),
-        }
+        self.kind
+            .capabilities()
+            .supports_param_value(scene_id, param, value)
     }
 }
 

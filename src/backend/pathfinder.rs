@@ -20,42 +20,57 @@ use vello_common::pixmap::Pixmap;
 use wasm_bindgen::JsCast;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
+use crate::capability::{CapabilityProfile, UnsupportedParamValue};
 use crate::scenes::{ParamId, SceneId};
 
-pub fn supports_scene(scene_id: SceneId) -> bool {
-    matches!(
-        scene_id,
-        SceneId::Rect | SceneId::Strokes | SceneId::Polyline | SceneId::Svg | SceneId::Clip
-    )
-}
+const UNSUPPORTED_VALUES: &[UnsupportedParamValue] = &[UnsupportedParamValue::new(
+    SceneId::Rect,
+    ParamId::PaintMode,
+    1,
+)];
 
-pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
-    matches!(
-        (scene_id, param),
-        (SceneId::Rect, ParamId::NumRects)
-            | (SceneId::Rect, ParamId::PaintMode)
-            | (SceneId::Rect, ParamId::RectSize)
-            | (SceneId::Rect, ParamId::Rotated)
-            | (SceneId::Rect, ParamId::ImageFilter)
-            | (SceneId::Rect, ParamId::ImageOpaque)
-            | (SceneId::Rect, ParamId::UseDrawImage)
-            | (SceneId::Strokes, ParamId::NumStrokes)
-            | (SceneId::Strokes, ParamId::CurveType)
-            | (SceneId::Strokes, ParamId::Segments)
-            | (SceneId::Strokes, ParamId::StrokeWidth)
-            | (SceneId::Strokes, ParamId::Cap)
-            | (SceneId::Polyline, ParamId::NumVertices)
-            | (SceneId::Svg, ParamId::SvgAsset)
-            | (SceneId::Clip, ParamId::NumRects)
-            | (SceneId::Clip, ParamId::RectSize)
-            | (SceneId::Clip, ParamId::ClipMode)
-            | (SceneId::Clip, ParamId::ClipMethod)
+pub(crate) const CAPABILITIES: CapabilityProfile = CapabilityProfile::none()
+    .allow_scenes(&[
+        SceneId::Rect,
+        SceneId::Strokes,
+        SceneId::Polyline,
+        SceneId::Svg,
+        SceneId::Clip,
+    ])
+    .allow_params(
+        SceneId::Rect,
+        &[
+            ParamId::NumRects,
+            ParamId::PaintMode,
+            ParamId::RectSize,
+            ParamId::Rotated,
+            ParamId::ImageFilter,
+            ParamId::ImageOpaque,
+            ParamId::UseDrawImage,
+        ],
     )
-}
-
-pub fn supports_param_value(scene_id: SceneId, param: ParamId, value: f64) -> bool {
-    !matches!((scene_id, param, value as u32), (SceneId::Rect, ParamId::PaintMode, 1))
-}
+    .allow_params(
+        SceneId::Strokes,
+        &[
+            ParamId::NumStrokes,
+            ParamId::CurveType,
+            ParamId::Segments,
+            ParamId::StrokeWidth,
+            ParamId::Cap,
+        ],
+    )
+    .allow_params(SceneId::Polyline, &[ParamId::NumVertices])
+    .allow_params(SceneId::Svg, &[ParamId::SvgAsset])
+    .allow_params(
+        SceneId::Clip,
+        &[
+            ParamId::NumRects,
+            ParamId::RectSize,
+            ParamId::ClipMode,
+            ParamId::ClipMethod,
+        ],
+    )
+    .with_unsupported_values(UNSUPPORTED_VALUES);
 
 pub struct BackendImpl {
     ctx: DrawContext,
@@ -129,7 +144,8 @@ impl BackendImpl {
     pub fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
         let may_have_opacities = pixmap.may_have_opacities();
         let id = ImageId::new(self.uploaded_images.len() as u32);
-        self.uploaded_images.push(UploadedImage::from_pixmap(pixmap));
+        self.uploaded_images
+            .push(UploadedImage::from_pixmap(pixmap));
         ImageSource::opaque_id_with_opacity_hint(id, may_have_opacities)
     }
 
@@ -275,7 +291,10 @@ impl DrawContext {
                 };
                 PaintState::Image(ImagePaint {
                     image: uploaded.image.clone(),
-                    bilinear: !matches!(image.sampler.quality, vello_common::peniko::ImageQuality::Low),
+                    bilinear: !matches!(
+                        image.sampler.quality,
+                        vello_common::peniko::ImageQuality::Low
+                    ),
                     alpha: image.sampler.alpha,
                 })
             }
@@ -443,11 +462,7 @@ fn resolve_uploaded_image<'a>(
     }
 }
 
-fn draw_pathfinder_image(
-    canvas: &mut CanvasRenderingContext2D,
-    image: &ImagePaint,
-    rect: RectF,
-) {
+fn draw_pathfinder_image(canvas: &mut CanvasRenderingContext2D, image: &ImagePaint, rect: RectF) {
     let mut pattern = Pattern::from_image(image.image.clone());
     pattern.set_smoothing_enabled(image.bilinear);
     let old_alpha = canvas.global_alpha();

@@ -11,6 +11,7 @@
 #![cfg(target_arch = "wasm32")]
 
 pub(crate) mod backend;
+pub(crate) mod capability;
 mod fps;
 pub(crate) mod harness;
 pub(crate) mod rng;
@@ -79,32 +80,7 @@ impl std::fmt::Debug for AppState {
 
 impl AppState {
     fn scene_params_for_ui(&self, scene_idx: usize) -> Vec<scenes::Param> {
-        let scene = self.scenes[scene_idx].as_ref();
-        scene
-            .params()
-            .into_iter()
-            .filter_map(|mut param| {
-                if !self.backend_caps.supports_param(scene.scene_id(), param.id) {
-                    return None;
-                }
-                if let scenes::ParamKind::Select(options) = &mut param.kind {
-                    options.retain(|(_, value)| {
-                        self.backend_caps
-                            .supports_param_value(scene.scene_id(), param.id, *value)
-                    });
-                    if options.is_empty() {
-                        return None;
-                    }
-                    if !options
-                        .iter()
-                        .any(|(_, value)| (*value - param.value).abs() < f64::EPSILON)
-                    {
-                        param.value = options[0].1;
-                    }
-                }
-                Some(param)
-            })
-            .collect()
+        scenes::visible_params(self.scenes[scene_idx].as_ref(), self.backend_caps)
     }
 
     fn switch_backend(&mut self, kind: BackendKind, now: f64) -> bool {
@@ -368,11 +344,7 @@ fn client_to_canvas_px(canvas: &HtmlCanvasElement, client_x: f64, client_y: f64)
     (x * canvas.width() as f64, y * canvas.height() as f64)
 }
 
-fn client_delta_to_canvas_px(
-    canvas: &HtmlCanvasElement,
-    delta_x: f64,
-    delta_y: f64,
-) -> (f64, f64) {
+fn client_delta_to_canvas_px(canvas: &HtmlCanvasElement, delta_x: f64, delta_y: f64) -> (f64, f64) {
     let rect = canvas.get_bounding_client_rect();
     let scale_x = canvas.width() as f64 / rect.width().max(1.0);
     let scale_y = canvas.height() as f64 / rect.height().max(1.0);
@@ -718,7 +690,8 @@ fn wire_pan_zoom(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
         }
         let x = e.client_x() as f64;
         let y = e.client_y() as f64;
-        let (dx, dy) = client_delta_to_canvas_px(&st.canvas, x - st.drag_last_x, y - st.drag_last_y);
+        let (dx, dy) =
+            client_delta_to_canvas_px(&st.canvas, x - st.drag_last_x, y - st.drag_last_y);
         st.pan_x += dx;
         st.pan_y += dy;
         st.drag_last_x = x;
@@ -869,8 +842,11 @@ fn wire_touch(state: &Rc<RefCell<AppState>>) {
                     st.zoom_at(cx, cy, factor);
                 }
                 // Pan by midpoint delta.
-                let (dx, dy) =
-                    client_delta_to_canvas_px(&st.canvas, mx - st.touch_last_x, my - st.touch_last_y);
+                let (dx, dy) = client_delta_to_canvas_px(
+                    &st.canvas,
+                    mx - st.touch_last_x,
+                    my - st.touch_last_y,
+                );
                 st.pan_x += dx;
                 st.pan_y += dy;
 
@@ -998,12 +974,8 @@ pub fn bench_worker_init() {
                     js_sys::Reflect::set(&entry, &"idx".into(), &(i as u32).into()).unwrap();
                     js_sys::Reflect::set(&entry, &"name".into(), &d.name.into()).unwrap();
                     js_sys::Reflect::set(&entry, &"category".into(), &d.category.into()).unwrap();
-                    js_sys::Reflect::set(
-                        &entry,
-                        &"description".into(),
-                        &d.description.into(),
-                    )
-                    .unwrap();
+                    js_sys::Reflect::set(&entry, &"description".into(), &d.description.into())
+                        .unwrap();
                     arr.push(&entry);
                 }
                 let reply = js_sys::Object::new();
@@ -1033,9 +1005,9 @@ pub fn bench_worker_init() {
                 js_sys::Reflect::set(&reply, &"type".into(), &"bench_result".into()).unwrap();
                 js_sys::Reflect::set(&reply, &"idx".into(), &(idx as u32).into()).unwrap();
 
-                if let Some(result) = harness::run_single_bench(
-                    idx, preset, warmup_ms, run_ms, width, height,
-                ) {
+                if let Some(result) =
+                    harness::run_single_bench(idx, preset, warmup_ms, run_ms, width, height)
+                {
                     js_sys::Reflect::set(&reply, &"name".into(), &result.name.into()).unwrap();
                     js_sys::Reflect::set(
                         &reply,

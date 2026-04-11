@@ -13,7 +13,11 @@ use web_sys::{
 };
 
 use crate::backend::layout_text_glyphs;
+use crate::capability::CapabilityProfile;
 use crate::scenes::{ParamId, SceneId};
+
+pub(crate) const CAPABILITIES: CapabilityProfile =
+    CapabilityProfile::all().deny_params(SceneId::Rect, &[ParamId::UseDrawImage]);
 
 extern crate alloc;
 
@@ -26,18 +30,6 @@ const FS: &str = "\
     varying vec2 uv;\
     uniform sampler2D t;\
     void main(){gl_FragColor=texture2D(t,uv);}";
-
-pub fn supports_scene(_scene_id: SceneId) -> bool {
-    true
-}
-
-pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
-    !(scene_id == SceneId::Rect && param == ParamId::UseDrawImage)
-}
-
-pub fn supports_param_value(_scene_id: SceneId, _param: ParamId, _value: f64) -> bool {
-    true
-}
 
 pub struct BackendImpl {
     ctx: vello_cpu::RenderContext,
@@ -133,7 +125,8 @@ impl BackendImpl {
         let bytes: &[u8] = bytemuck::cast_slice(target.data());
 
         self.gl.use_program(Some(&self.program));
-        self.gl.bind_buffer(GL::ARRAY_BUFFER, Some(&self.quad_buffer));
+        self.gl
+            .bind_buffer(GL::ARRAY_BUFFER, Some(&self.quad_buffer));
         self.gl.enable_vertex_attrib_array(self.position_loc);
         self.gl
             .vertex_attrib_pointer_with_i32(self.position_loc, 2, GL::FLOAT, false, 0, 0);

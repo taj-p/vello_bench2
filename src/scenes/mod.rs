@@ -8,7 +8,7 @@ mod strokes;
 mod svg;
 mod text;
 
-use crate::backend::Renderer;
+use crate::backend::{BackendCapabilities, Renderer};
 pub use clip::ClipScene;
 pub use filter_layers::FilterLayersScene;
 pub use polyline::PolylineScene;
@@ -27,6 +27,27 @@ pub enum SceneId {
     Clip,
     Text,
     FilterLayers,
+}
+
+impl SceneId {
+    pub const COUNT: usize = 7;
+    pub const ALL_MASK: u32 = (1 << Self::COUNT) - 1;
+
+    pub(crate) const fn index(self) -> usize {
+        match self {
+            Self::Rect => 0,
+            Self::Strokes => 1,
+            Self::Polyline => 2,
+            Self::Svg => 3,
+            Self::Clip => 4,
+            Self::Text => 5,
+            Self::FilterLayers => 6,
+        }
+    }
+
+    pub(crate) const fn bit(self) -> u32 {
+        1 << self.index()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -62,6 +83,46 @@ pub enum ParamId {
 }
 
 impl ParamId {
+    pub const COUNT: usize = 28;
+    pub const ALL_MASK: u64 = (1u64 << Self::COUNT) - 1;
+
+    pub(crate) const fn index(self) -> usize {
+        match self {
+            Self::NumRects => 0,
+            Self::PaintMode => 1,
+            Self::RectSize => 2,
+            Self::Rotated => 3,
+            Self::GradientShape => 4,
+            Self::DynamicGradient => 5,
+            Self::ImageFilter => 6,
+            Self::ImageOpaque => 7,
+            Self::UseDrawImage => 8,
+            Self::NumStrokes => 9,
+            Self::CurveType => 10,
+            Self::Segments => 11,
+            Self::StrokeWidth => 12,
+            Self::Cap => 13,
+            Self::NumVertices => 14,
+            Self::SvgAsset => 15,
+            Self::ClipMode => 16,
+            Self::ClipMethod => 17,
+            Self::NumRuns => 18,
+            Self::FontSize => 19,
+            Self::FilterKind => 20,
+            Self::Speed => 21,
+            Self::BlurStdDeviation => 22,
+            Self::ShadowDx => 23,
+            Self::ShadowDy => 24,
+            Self::ShadowAlpha => 25,
+            Self::Opaque => 26,
+            Self::TargetOverlap => 27,
+        }
+    }
+
+    pub(crate) const fn bit(self) -> u64 {
+        1u64 << self.index()
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::NumRects => "num_rects",
@@ -147,6 +208,33 @@ pub trait BenchScene {
         time: f64,
         view: Affine,
     );
+}
+
+pub fn visible_params(scene: &dyn BenchScene, capabilities: BackendCapabilities) -> Vec<Param> {
+    scene
+        .params()
+        .into_iter()
+        .filter_map(|mut param| {
+            if !capabilities.supports_param(scene.scene_id(), param.id) {
+                return None;
+            }
+            if let ParamKind::Select(options) = &mut param.kind {
+                options.retain(|(_, value)| {
+                    capabilities.supports_param_value(scene.scene_id(), param.id, *value)
+                });
+                if options.is_empty() {
+                    return None;
+                }
+                if !options
+                    .iter()
+                    .any(|(_, value)| (*value - param.value).abs() < f64::EPSILON)
+                {
+                    param.value = options[0].1;
+                }
+            }
+            Some(param)
+        })
+        .collect()
 }
 
 // ── Shared animation helpers ─────────────────────────────────────────────────

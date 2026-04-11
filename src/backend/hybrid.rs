@@ -7,19 +7,9 @@ use vello_common::pixmap::Pixmap;
 use web_sys::HtmlCanvasElement;
 
 use crate::backend::layout_text_glyphs;
-use crate::scenes::{ParamId, SceneId};
+use crate::capability::CapabilityProfile;
 
-pub fn supports_scene(_scene_id: SceneId) -> bool {
-    true
-}
-
-pub fn supports_param(_scene_id: SceneId, _param: ParamId) -> bool {
-    true
-}
-
-pub fn supports_param_value(_scene_id: SceneId, _param: ParamId, _value: f64) -> bool {
-    true
-}
+pub(crate) const CAPABILITIES: CapabilityProfile = CapabilityProfile::all();
 
 pub struct BackendImpl {
     ctx: vello_hybrid::Scene,

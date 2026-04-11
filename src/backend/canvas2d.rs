@@ -16,60 +16,68 @@ use web_sys::{
     window,
 };
 
+use crate::capability::CapabilityProfile;
 use crate::scenes::{ParamId, SceneId};
 
-pub fn supports_scene(scene_id: SceneId) -> bool {
-    matches!(
-        scene_id,
-        SceneId::Rect
-            | SceneId::Strokes
-            | SceneId::Polyline
-            | SceneId::Svg
-            | SceneId::Clip
-            | SceneId::Text
-            | SceneId::FilterLayers
+pub(crate) const CAPABILITIES: CapabilityProfile = CapabilityProfile::none()
+    .allow_scenes(&[
+        SceneId::Rect,
+        SceneId::Strokes,
+        SceneId::Polyline,
+        SceneId::Svg,
+        SceneId::Clip,
+        SceneId::Text,
+        SceneId::FilterLayers,
+    ])
+    .allow_params(
+        SceneId::Rect,
+        &[
+            ParamId::NumRects,
+            ParamId::PaintMode,
+            ParamId::RectSize,
+            ParamId::Rotated,
+            ParamId::ImageFilter,
+            ParamId::ImageOpaque,
+            ParamId::UseDrawImage,
+            ParamId::GradientShape,
+            ParamId::DynamicGradient,
+        ],
     )
-}
-
-pub fn supports_param(scene_id: SceneId, param: ParamId) -> bool {
-    matches!(
-        (scene_id, param),
-        (SceneId::Rect, ParamId::NumRects)
-            | (SceneId::Rect, ParamId::PaintMode)
-            | (SceneId::Rect, ParamId::RectSize)
-            | (SceneId::Rect, ParamId::Rotated)
-            | (SceneId::Rect, ParamId::ImageFilter)
-            | (SceneId::Rect, ParamId::ImageOpaque)
-            | (SceneId::Rect, ParamId::UseDrawImage)
-            | (SceneId::Rect, ParamId::GradientShape)
-            | (SceneId::Rect, ParamId::DynamicGradient)
-            | (SceneId::Strokes, ParamId::NumStrokes)
-            | (SceneId::Strokes, ParamId::CurveType)
-            | (SceneId::Strokes, ParamId::Segments)
-            | (SceneId::Strokes, ParamId::StrokeWidth)
-            | (SceneId::Strokes, ParamId::Cap)
-            | (SceneId::Polyline, ParamId::NumVertices)
-            | (SceneId::Svg, ParamId::SvgAsset)
-            | (SceneId::Clip, ParamId::NumRects)
-            | (SceneId::Clip, ParamId::RectSize)
-            | (SceneId::Clip, ParamId::ClipMode)
-            | (SceneId::Clip, ParamId::ClipMethod)
-            | (SceneId::Text, ParamId::NumRuns)
-            | (SceneId::Text, ParamId::FontSize)
-            | (SceneId::FilterLayers, ParamId::NumRects)
-            | (SceneId::FilterLayers, ParamId::RectSize)
-            | (SceneId::FilterLayers, ParamId::FilterKind)
-            | (SceneId::FilterLayers, ParamId::Speed)
-            | (SceneId::FilterLayers, ParamId::BlurStdDeviation)
-            | (SceneId::FilterLayers, ParamId::ShadowDx)
-            | (SceneId::FilterLayers, ParamId::ShadowDy)
-            | (SceneId::FilterLayers, ParamId::ShadowAlpha)
+    .allow_params(
+        SceneId::Strokes,
+        &[
+            ParamId::NumStrokes,
+            ParamId::CurveType,
+            ParamId::Segments,
+            ParamId::StrokeWidth,
+            ParamId::Cap,
+        ],
     )
-}
-
-pub fn supports_param_value(_scene_id: SceneId, _param: ParamId, _value: f64) -> bool {
-    true
-}
+    .allow_params(SceneId::Polyline, &[ParamId::NumVertices])
+    .allow_params(SceneId::Svg, &[ParamId::SvgAsset])
+    .allow_params(
+        SceneId::Clip,
+        &[
+            ParamId::NumRects,
+            ParamId::RectSize,
+            ParamId::ClipMode,
+            ParamId::ClipMethod,
+        ],
+    )
+    .allow_params(SceneId::Text, &[ParamId::NumRuns, ParamId::FontSize])
+    .allow_params(
+        SceneId::FilterLayers,
+        &[
+            ParamId::NumRects,
+            ParamId::RectSize,
+            ParamId::FilterKind,
+            ParamId::Speed,
+            ParamId::BlurStdDeviation,
+            ParamId::ShadowDx,
+            ParamId::ShadowDy,
+            ParamId::ShadowAlpha,
+        ],
+    );
 
 pub struct BackendImpl {
     ctx: CanvasRenderingContext2d,
@@ -404,9 +412,12 @@ impl UploadedImage {
             .into_iter()
             .flat_map(|rgba| [rgba.r, rgba.g, rgba.b, rgba.a])
             .collect::<Vec<_>>();
-        let image_data =
-            ImageData::new_with_u8_clamped_array_and_sh(Clamped(&data), width as u32, height as u32)
-                .unwrap();
+        let image_data = ImageData::new_with_u8_clamped_array_and_sh(
+            Clamped(&data),
+            width as u32,
+            height as u32,
+        )
+        .unwrap();
         let document = window().unwrap().document().unwrap();
         let canvas: HtmlCanvasElement = document
             .create_element("canvas")

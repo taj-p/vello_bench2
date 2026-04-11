@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use crate::backend::{BackendCapabilities, BackendKind};
 use crate::harness::{BenchDef, BenchResult, BenchScale};
-use crate::scenes::{BenchScene, Param, ParamId, ParamKind};
+use crate::scenes::{BenchScene, ParamId};
 use crate::storage::{BenchReport, UiState};
 use wasm_bindgen::prelude::*;
 use web_sys::{
@@ -102,22 +102,13 @@ fn stepper_decrement(value: f64, base_step: f64) -> f64 {
     }
 }
 
-fn set_stepper_value(
-    input: &HtmlInputElement,
-    label: &HtmlElement,
-    value: f64,
-    step: f64,
-) {
+fn set_stepper_value(input: &HtmlInputElement, label: &HtmlElement, value: f64, step: f64) {
     let snapped = snap_to_step(value, step);
     input.set_value(&snapped.to_string());
     label.set_text_content(Some(&format_val(snapped, range_step(snapped, step))));
 }
 
-fn sanitized_stepper_value(
-    input: &HtmlInputElement,
-    label: &HtmlElement,
-    step: f64,
-) -> f64 {
+fn sanitized_stepper_value(input: &HtmlInputElement, label: &HtmlElement, step: f64) -> f64 {
     let raw = label.text_content().unwrap_or_default();
     let trimmed = raw.trim();
     if let Ok(value) = trimmed.parse::<f64>() {
@@ -128,36 +119,6 @@ fn sanitized_stepper_value(
         label.set_text_content(Some(&format_val(fallback, range_step(fallback, step))));
         fallback
     }
-}
-
-fn visible_params_for_scene(
-    scene: &dyn BenchScene,
-    capabilities: BackendCapabilities,
-) -> Vec<Param> {
-    scene
-        .params()
-        .into_iter()
-        .filter_map(|mut param| {
-            if !capabilities.supports_param(scene.scene_id(), param.id) {
-                return None;
-            }
-            if let ParamKind::Select(options) = &mut param.kind {
-                options.retain(|(_, value)| {
-                    capabilities.supports_param_value(scene.scene_id(), param.id, *value)
-                });
-                if options.is_empty() {
-                    return None;
-                }
-                if !options
-                    .iter()
-                    .any(|(_, value)| (*value - param.value).abs() < f64::EPSILON)
-                {
-                    param.value = options[0].1;
-                }
-            }
-            Some(param)
-        })
-        .collect()
 }
 
 // ── Mode ─────────────────────────────────────────────────────────────────────
@@ -583,11 +544,9 @@ impl Ui {
             .iter()
             .map(|(ctrl, val_span, param_id)| {
                 let v: f64 = match ctrl {
-                    ParamCtrl::Stepper {
-                        input,
-                        step,
-                        ..
-                    } => sanitized_stepper_value(input, val_span, *step),
+                    ParamCtrl::Stepper { input, step, .. } => {
+                        sanitized_stepper_value(input, val_span, *step)
+                    }
                     ParamCtrl::Select { select, .. } => select.value().parse().unwrap_or(0.0),
                 };
                 (*param_id, v)
@@ -989,7 +948,10 @@ impl Ui {
         };
         for br in &self.bench_rows {
             if let Some(saved) = report.results.iter().find(|r| r.name == br.name) {
-                let text = format!("{:.2} ms/f  ({} iters)", saved.ms_per_frame, saved.iterations);
+                let text = format!(
+                    "{:.2} ms/f  ({} iters)",
+                    saved.ms_per_frame, saved.iterations
+                );
                 br.result_text.set_text_content(Some(&text));
                 br.result_line
                     .style()
@@ -1127,11 +1089,9 @@ impl Ui {
             .iter()
             .map(|(ctrl, val_span, param_id)| {
                 let v: f64 = match ctrl {
-                    ParamCtrl::Stepper {
-                        input,
-                        step,
-                        ..
-                    } => sanitized_stepper_value(input, val_span, *step),
+                    ParamCtrl::Stepper { input, step, .. } => {
+                        sanitized_stepper_value(input, val_span, *step)
+                    }
                     ParamCtrl::Select { select, .. } => select.value().parse().unwrap_or(0.0),
                 };
                 (param_id.as_str().to_string(), v)
@@ -1179,11 +1139,7 @@ impl Ui {
         for (ctrl, val_span, param_id) in &self.controls {
             if let Some((_, v)) = saved.params.iter().find(|(k, _)| k == param_id.as_str()) {
                 match ctrl {
-                    ParamCtrl::Stepper {
-                        input,
-                        step,
-                        ..
-                    } => {
+                    ParamCtrl::Stepper { input, step, .. } => {
                         set_stepper_value(input, val_span, *v, *step);
                     }
                     ParamCtrl::Select { select, .. } => {
@@ -1459,18 +1415,11 @@ fn build_top_bar(
             .unwrap_or_else(|| "control".to_string());
         let is_treatment = variant == "treatment";
         let variant_btn = div(document);
-        variant_btn.set_text_content(Some(if is_treatment {
-            "TREATMENT"
-        } else {
-            "CONTROL"
-        }));
+        variant_btn.set_text_content(Some(if is_treatment { "TREATMENT" } else { "CONTROL" }));
         set(
             &variant_btn,
             &[
-                (
-                    "color",
-                    if is_treatment { "#fab387" } else { "#89b4fa" },
-                ),
+                ("color", if is_treatment { "#fab387" } else { "#89b4fa" }),
                 ("font-size", "12px"),
                 ("font-weight", "600"),
                 ("cursor", "pointer"),
@@ -1725,7 +1674,7 @@ fn build_interactive_view(
     let controls = build_controls(
         document,
         &sidebar,
-        &visible_params_for_scene(scenes[current_scene].as_ref(), capabilities),
+        &crate::scenes::visible_params(scenes[current_scene].as_ref(), capabilities),
         None,
         Some(dirty),
     );
@@ -2790,7 +2739,11 @@ fn build_controls(
         );
 
         let ctrl = match &p.kind {
-            ParamKind::Slider { min: _, max: _, step } => {
+            ParamKind::Slider {
+                min: _,
+                max: _,
+                step,
+            } => {
                 let input: HtmlInputElement = document
                     .create_element("input")
                     .unwrap()
