@@ -7,10 +7,11 @@
 
 use super::{BenchScene, Param, ParamId, ParamKind, SceneId, bounce, delta_time};
 use crate::backend::{Backend, Pixmap};
+use crate::resource_store::ResourceStore;
 use crate::rng::Rng;
 use smallvec::smallvec;
 use vello_common::kurbo::{Affine, Point, Rect};
-use vello_common::paint::{Image, ImageSource};
+use vello_common::paint::Image;
 use vello_common::peniko::{
     Color, ColorStop, ColorStops, Extend, Gradient, ImageQuality, ImageSampler,
     LinearGradientPosition, RadialGradientPosition, SweepGradientPosition, color::DynamicColor,
@@ -160,10 +161,8 @@ pub struct RectScene {
     rng: Rng,
     last_time: f64,
     frame: u64,
-    /// Uploaded images (populated on first render).
-    image_sources: Vec<ImageSource>,
-    /// Tracks what opacity mode images were generated with.
-    images_were_opaque: bool,
+    /// Bumps whenever the uploaded image set becomes invalid.
+    image_epoch: u64,
     /// When > 0, overrides `rect_size` at render time to maintain this
     /// average per-pixel overlap ratio regardless of viewport dimensions
     /// and rect count. rect_size = sqrt(target * viewport_area / num_rects).
@@ -189,8 +188,7 @@ impl RectScene {
             rng: Rng::new(0xDEAD_BEEF),
             last_time: 0.0,
             frame: 0,
-            image_sources: Vec::new(),
-            images_were_opaque: false,
+            image_epoch: 0,
             target_overlap: 0.0,
         }
     }
@@ -214,75 +212,74 @@ impl RectScene {
     /// Each image gets a concentric-ring pattern with a unique frequency and
     /// color palette — cheap to compute but produces visible moiré when scaled,
     /// making the difference between nearest-neighbor and bilinear obvious.
-    fn ensure_images(&mut self, backend: &mut dyn Backend) {
-        if !self.image_sources.is_empty() && self.images_were_opaque == self.image_opaque {
-            return;
-        }
-        self.image_sources.clear();
-        self.images_were_opaque = self.image_opaque;
-        let mut rng = Rng::new(0xCAFE_BABE);
-        let s = IMAGE_SIZE as f64;
-        let cx = s / 2.0;
-        let cy = s / 2.0;
+    fn image_source(
+        &self,
+        resources: &mut ResourceStore,
+        backend: &mut dyn Backend,
+        image_idx: usize,
+    ) -> vello_common::paint::ImageSource {
+        resources.get_or_upload_image(
+            self.scene_id(),
+            self.image_epoch,
+            image_idx as u64,
+            backend,
+            || make_image_pixmap(image_idx, self.image_opaque),
+        )
+    }
+}
 
-        for _ in 0..NUM_IMAGES {
-            // Random palette: two colours that alternate in the ring pattern.
-            let c1 = rng.color(255);
-            let c2 = rng.color(255);
-            let [r1, g1, b1, _] = c1.to_rgba8().to_u8_array();
-            let [r2, g2, b2, _] = c2.to_rgba8().to_u8_array();
-            // Frequency: how many rings fit in the image (3..8).
-            let freq = rng.f64() * 5.0 + 3.0;
-            let max_dist = (cx * cx + cy * cy).sqrt();
+fn make_image_pixmap(image_idx: usize, image_opaque: bool) -> Pixmap {
+    let mut rng = Rng::new(0xCAFE_BABE ^ ((image_idx as u64 + 1) * 0x9E37_79B9));
+    let s = IMAGE_SIZE as f64;
+    let cx = s / 2.0;
+    let cy = s / 2.0;
+    let c1 = rng.color(255);
+    let c2 = rng.color(255);
+    let [r1, g1, b1, _] = c1.to_rgba8().to_u8_array();
+    let [r2, g2, b2, _] = c2.to_rgba8().to_u8_array();
+    let freq = rng.f64() * 5.0 + 3.0;
+    let max_dist = (cx * cx + cy * cy).sqrt();
 
-            let mut pixels = vec![
-                PremulRgba8 {
-                    r: 0,
-                    g: 0,
-                    b: 0,
-                    a: 0
-                };
-                s as usize * s as usize
-            ];
+    let mut pixels = vec![
+        PremulRgba8 {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 0
+        };
+        s as usize * s as usize
+    ];
 
-            for y in 0..IMAGE_SIZE {
-                for x in 0..IMAGE_SIZE {
-                    let dx = x as f64 - cx;
-                    let dy = y as f64 - cy;
-                    let dist = (dx * dx + dy * dy).sqrt();
-                    // sin² gives smooth concentric rings.
-                    let t = (dist * freq * std::f64::consts::TAU / s).sin();
-                    let t = (t * t) as f32; // 0..1
+    for y in 0..IMAGE_SIZE {
+        for x in 0..IMAGE_SIZE {
+            let dx = x as f64 - cx;
+            let dy = y as f64 - cy;
+            let dist = (dx * dx + dy * dy).sqrt();
+            let t = (dist * freq * std::f64::consts::TAU / s).sin();
+            let t = (t * t) as f32;
 
-                    let alpha_f = if self.image_opaque {
-                        1.0
-                    } else {
-                        // Alpha fades from fully opaque at center to ~30% at edges.
-                        1.0 - 0.7 * (dist / max_dist) as f32
-                    };
-                    let a = (alpha_f * 255.0) as u8;
+            let alpha_f = if image_opaque {
+                1.0
+            } else {
+                1.0 - 0.7 * (dist / max_dist) as f32
+            };
+            let a = (alpha_f * 255.0) as u8;
 
-                    // Premultiply RGB by alpha.
-                    let lerp_premul = |c1: u8, c2: u8| -> u8 {
-                        let c = c1 as f32 + (c2 as f32 - c1 as f32) * t;
-                        (c * alpha_f) as u8
-                    };
-                    let idx = y as usize * IMAGE_SIZE as usize + x as usize;
-                    pixels[idx] = PremulRgba8 {
-                        r: lerp_premul(r1, r2),
-                        g: lerp_premul(g1, g2),
-                        b: lerp_premul(b1, b2),
-                        a,
-                    };
-                }
-            }
-
-            let pixmap =
-                Pixmap::from_parts_with_opacity(pixels, IMAGE_SIZE, IMAGE_SIZE, !self.image_opaque);
-            let source = backend.upload_image(pixmap);
-            self.image_sources.push(source);
+            let lerp_premul = |c1: u8, c2: u8| -> u8 {
+                let c = c1 as f32 + (c2 as f32 - c1 as f32) * t;
+                (c * alpha_f) as u8
+            };
+            let idx = y as usize * IMAGE_SIZE as usize + x as usize;
+            pixels[idx] = PremulRgba8 {
+                r: lerp_premul(r1, r2),
+                g: lerp_premul(g1, g2),
+                b: lerp_premul(b1, b2),
+                a,
+            };
         }
     }
+
+    Pixmap::from_parts_with_opacity(pixels, IMAGE_SIZE, IMAGE_SIZE, !image_opaque)
 }
 
 fn random_rect(rng: &mut Rng, w: f64, h: f64, alpha: u8) -> AnimatedRect {
@@ -390,7 +387,13 @@ impl BenchScene for RectScene {
             ParamId::GradientShape => self.gradient_shape = value as u32,
             ParamId::DynamicGradient => self.dynamic_gradient = value >= 0.5,
             ParamId::ImageFilter => self.image_filter = value as u32,
-            ParamId::ImageOpaque => self.image_opaque = value >= 0.5,
+            ParamId::ImageOpaque => {
+                let new_opaque = value >= 0.5;
+                if new_opaque != self.image_opaque {
+                    self.image_opaque = new_opaque;
+                    self.image_epoch = self.image_epoch.wrapping_add(1);
+                }
+            }
             ParamId::UseDrawImage => self.use_draw_image = value >= 0.5,
             ParamId::Opaque => {
                 let new_val = value >= 0.5;
@@ -407,6 +410,7 @@ impl BenchScene for RectScene {
     fn render(
         &mut self,
         backend: &mut dyn Backend,
+        resources: &mut ResourceStore,
         width: u32,
         height: u32,
         time: f64,
@@ -418,11 +422,6 @@ impl BenchScene for RectScene {
         // Ensure rect count matches (preserving existing rects).
         if self.rects.len() != self.num_rects {
             self.resize_rects(w, h);
-        }
-
-        // Lazily upload images on first use.
-        if self.paint_mode == 2 {
-            self.ensure_images(backend);
         }
 
         let dt = delta_time(&mut self.last_time, time, self.speed);
@@ -563,7 +562,7 @@ impl BenchScene for RectScene {
                 _ if self.use_draw_image => {
                     // draw_image expects the rect in image-native coordinates;
                     // the scene transform handles positioning and scaling.
-                    let source = self.image_sources[r.image_idx].clone();
+                    let source = self.image_source(resources, backend, r.image_idx);
                     let bilinear = self.image_filter != 0;
                     let scale = size / IMAGE_SIZE as f64;
                     let img_rect = Rect::new(0.0, 0.0, IMAGE_SIZE as f64, IMAGE_SIZE as f64);
@@ -587,7 +586,7 @@ impl BenchScene for RectScene {
                 _ => {
                     // Image paint mode.
                     let image = Image {
-                        image: self.image_sources[r.image_idx].clone(),
+                        image: self.image_source(resources, backend, r.image_idx),
                         sampler: ImageSampler {
                             x_extend: Extend::Pad,
                             y_extend: Extend::Pad,

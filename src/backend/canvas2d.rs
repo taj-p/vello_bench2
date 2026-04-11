@@ -88,7 +88,7 @@ pub struct BackendImpl {
     current_transform: Affine,
     width: f64,
     height: f64,
-    uploaded_images: Vec<UploadedImage>,
+    uploaded_images: Vec<Option<UploadedImage>>,
 }
 
 #[derive(Clone)]
@@ -160,7 +160,10 @@ impl BackendImpl {
 
     fn resolve_image(&self, image: &ImageSource) -> Option<&UploadedImage> {
         match image {
-            ImageSource::OpaqueId { id, .. } => self.uploaded_images.get(id.as_u32() as usize),
+            ImageSource::OpaqueId { id, .. } => self
+                .uploaded_images
+                .get(id.as_u32() as usize)
+                .and_then(Option::as_ref),
             ImageSource::Pixmap(_) => None,
         }
     }
@@ -394,9 +397,27 @@ impl Backend for BackendImpl {
     fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
         let may_have_opacities = pixmap.may_have_opacities();
         let uploaded = UploadedImage::from_pixmap(pixmap);
-        let id = ImageId::new(self.uploaded_images.len() as u32);
-        self.uploaded_images.push(uploaded);
+        let idx = self
+            .uploaded_images
+            .iter()
+            .position(Option::is_none)
+            .unwrap_or(self.uploaded_images.len());
+        if idx == self.uploaded_images.len() {
+            self.uploaded_images.push(Some(uploaded));
+        } else {
+            self.uploaded_images[idx] = Some(uploaded);
+        }
+        let id = ImageId::new(idx as u32);
         ImageSource::opaque_id_with_opacity_hint(id, may_have_opacities)
+    }
+
+    fn destroy_image(&mut self, image: &ImageSource) {
+        let ImageSource::OpaqueId { id, .. } = image else {
+            return;
+        };
+        if let Some(slot) = self.uploaded_images.get_mut(id.as_u32() as usize) {
+            *slot = None;
+        }
     }
 }
 

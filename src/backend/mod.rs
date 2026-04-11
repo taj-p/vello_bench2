@@ -10,7 +10,8 @@ use skrifa::raw::FileRef;
 use vello_common::filter_effects::Filter;
 use vello_common::glyph::Glyph;
 use vello_common::kurbo::{Affine, BezPath, Rect, Stroke};
-use vello_common::paint::{ImageSource, PaintType};
+pub use vello_common::paint::ImageSource;
+use vello_common::paint::{ImageId, PaintType};
 use vello_common::peniko::{Fill, FontData};
 use web_sys::HtmlCanvasElement;
 
@@ -18,11 +19,6 @@ use crate::capability::CapabilityProfile;
 use crate::scenes::{ParamId, SceneId};
 
 pub use vello_common::pixmap::Pixmap;
-
-// TODO: Unify image handling across backends around explicit uploaded image
-// handles instead of passing `ImageSource` through the renderer API. That
-// should include explicit destruction once scene-cached images are no longer
-// needed, so backends can release atlas/registry/storage resources promptly.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendKind {
@@ -114,6 +110,14 @@ pub trait Backend {
     );
     fn draw_image(&mut self, image: ImageSource, rect: &Rect, bilinear: bool);
     fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource;
+    fn destroy_image(&mut self, image: &ImageSource);
+}
+
+pub fn uploaded_image_id(image: &ImageSource) -> Option<ImageId> {
+    match image {
+        ImageSource::OpaqueId { id, .. } => Some(*id),
+        ImageSource::Pixmap(_) => None,
+    }
 }
 
 pub fn layout_text_glyphs(

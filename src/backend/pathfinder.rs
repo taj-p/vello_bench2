@@ -83,7 +83,7 @@ pub(crate) const CAPABILITIES: CapabilityProfile = CapabilityProfile::none()
 pub struct BackendImpl {
     ctx: DrawContext,
     renderer: PathfinderRenderer<WebGlDevice>,
-    uploaded_images: Vec<UploadedImage>,
+    uploaded_images: Vec<Option<UploadedImage>>,
 }
 
 impl std::fmt::Debug for BackendImpl {
@@ -237,10 +237,28 @@ impl Backend for BackendImpl {
 
     fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
         let may_have_opacities = pixmap.may_have_opacities();
-        let id = ImageId::new(self.uploaded_images.len() as u32);
-        self.uploaded_images
-            .push(UploadedImage::from_pixmap(pixmap));
+        let uploaded = UploadedImage::from_pixmap(pixmap);
+        let idx = self
+            .uploaded_images
+            .iter()
+            .position(Option::is_none)
+            .unwrap_or(self.uploaded_images.len());
+        if idx == self.uploaded_images.len() {
+            self.uploaded_images.push(Some(uploaded));
+        } else {
+            self.uploaded_images[idx] = Some(uploaded);
+        }
+        let id = ImageId::new(idx as u32);
         ImageSource::opaque_id_with_opacity_hint(id, may_have_opacities)
+    }
+
+    fn destroy_image(&mut self, image: &ImageSource) {
+        let ImageSource::OpaqueId { id, .. } = image else {
+            return;
+        };
+        if let Some(slot) = self.uploaded_images.get_mut(id.as_u32() as usize) {
+            *slot = None;
+        }
     }
 }
 
@@ -305,7 +323,7 @@ impl DrawContext {
         self.canvas.canvas_mut().take_scene()
     }
 
-    fn set_paint(&mut self, paint: PaintType, uploaded_images: &[UploadedImage]) {
+    fn set_paint(&mut self, paint: PaintType, uploaded_images: &[Option<UploadedImage>]) {
         self.current_paint = match paint {
             PaintType::Solid(color) => {
                 let [r, g, b, a] = color.to_rgba8().to_u8_array();
@@ -443,7 +461,7 @@ impl DrawContext {
         image: ImageSource,
         rect: &Rect,
         bilinear: bool,
-        uploaded_images: &[UploadedImage],
+        uploaded_images: &[Option<UploadedImage>],
     ) {
         let Some(uploaded) = resolve_uploaded_image(uploaded_images, &image) else {
             return;
@@ -522,11 +540,13 @@ impl UploadedImage {
 }
 
 fn resolve_uploaded_image<'a>(
-    uploaded_images: &'a [UploadedImage],
+    uploaded_images: &'a [Option<UploadedImage>],
     image: &ImageSource,
 ) -> Option<&'a UploadedImage> {
     match image {
-        ImageSource::OpaqueId { id, .. } => uploaded_images.get(id.as_u32() as usize),
+        ImageSource::OpaqueId { id, .. } => uploaded_images
+            .get(id.as_u32() as usize)
+            .and_then(Option::as_ref),
         ImageSource::Pixmap(_) => None,
     }
 }

@@ -9,6 +9,7 @@ use std::f64::consts::{FRAC_PI_2, PI};
 
 use super::{BenchScene, Param, ParamId, ParamKind, SceneId, bounce, delta_time};
 use crate::backend::Backend;
+use crate::resource_store::ResourceStore;
 use crate::rng::Rng;
 use vello_common::kurbo::{Affine, BezPath, Point, Rect, Vec2};
 use vello_common::peniko::Color;
@@ -168,6 +169,7 @@ impl BenchScene for ClipScene {
     fn render(
         &mut self,
         backend: &mut dyn Backend,
+        _resources: &mut ResourceStore,
         width: u32,
         height: u32,
         time: f64,

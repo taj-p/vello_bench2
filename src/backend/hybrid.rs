@@ -6,7 +6,7 @@ use vello_common::peniko::{Fill, FontData};
 use vello_common::pixmap::Pixmap;
 use web_sys::HtmlCanvasElement;
 
-use crate::backend::{Backend, BackendKind, layout_text_glyphs};
+use crate::backend::{Backend, BackendKind, layout_text_glyphs, uploaded_image_id};
 use crate::capability::CapabilityProfile;
 
 pub(crate) const CAPABILITIES: CapabilityProfile = CapabilityProfile::all();
@@ -148,5 +148,11 @@ impl Backend for BackendImpl {
     fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
         let id = self.renderer.upload_image(&pixmap);
         ImageSource::opaque_id_with_opacity_hint(id, pixmap.may_have_opacities())
+    }
+
+    fn destroy_image(&mut self, image: &ImageSource) {
+        if let Some(id) = uploaded_image_id(image) {
+            self.renderer.destroy_image(id);
+        }
     }
 }

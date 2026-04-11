@@ -14,6 +14,7 @@ pub(crate) mod backend;
 pub(crate) mod capability;
 mod fps;
 pub(crate) mod harness;
+pub(crate) mod resource_store;
 pub(crate) mod rng;
 pub mod scenes;
 pub(crate) mod storage;
@@ -28,6 +29,7 @@ use backend::{
 };
 use fps::FpsTracker;
 use harness::{BenchDef, BenchHarness, HarnessEvent, bench_defs};
+use resource_store::ResourceStore;
 use scenes::{BenchScene, scene_index};
 use ui::{AppMode, Ui};
 use vello_common::kurbo::Affine;
@@ -55,6 +57,7 @@ struct AppState {
     ui: Ui,
     harness: BenchHarness,
     bench_defs: Vec<BenchDef>,
+    resources: ResourceStore,
     // View state (pan in physical pixels, zoom multiplier).
     pan_x: f64,
     pan_y: f64,
@@ -92,6 +95,7 @@ impl AppState {
 
         crate::storage::save_backend_name(kind.as_str());
         self.dragging = false;
+        self.resources.clear_all(self.backend.as_mut());
 
         let old_params = if self.ui.mode == AppMode::Interactive {
             self.ui.read_params()
@@ -143,6 +147,7 @@ impl AppState {
         self.dragging = false;
         self.touch_count = 0;
         self.pinch_dist = 0.0;
+        self.resources.clear_all(self.backend.as_mut());
         let kind = self.backend.kind();
         self.backend = new_backend(&self.canvas, self.width, self.height, kind);
         self.scenes = scenes::all_scenes();
@@ -172,6 +177,9 @@ impl AppState {
     fn tick_interactive(&mut self, now: f64) {
         let selected = self.ui.selected_scene();
         if selected != self.current_scene && selected < self.scenes.len() {
+            let old_scene_id = self.scenes[self.current_scene].scene_id();
+            self.resources
+                .clear_scene(old_scene_id, self.backend.as_mut());
             self.current_scene = selected;
             let kind = self.backend.kind();
             self.backend = new_backend(&self.canvas, self.width, self.height, kind);
@@ -195,7 +203,7 @@ impl AppState {
         self.backend.reset();
         let (w, h) = (self.width, self.height);
         let view = Affine::translate((self.pan_x, self.pan_y)) * Affine::scale(self.zoom);
-        self.scenes[idx].render(self.backend.as_mut(), w, h, now, view);
+        self.scenes[idx].render(self.backend.as_mut(), &mut self.resources, w, h, now, view);
 
         let encode_ms = perf.now() - t0;
 
@@ -480,6 +488,7 @@ pub async fn run() {
         ui,
         harness: BenchHarness::new(),
         bench_defs: defs,
+        resources: ResourceStore::new(),
         pan_x: 0.0,
         pan_y: 0.0,
         zoom: 1.0,

@@ -256,4 +256,14 @@ impl Backend for BackendImpl {
     fn upload_image(&mut self, pixmap: Pixmap) -> ImageSource {
         ImageSource::Pixmap(Arc::new(pixmap))
     }
+
+    fn destroy_image(&mut self, _image: &ImageSource) {}
+}
+
+impl Drop for BackendImpl {
+    fn drop(&mut self) {
+        self.gl.delete_texture(Some(&self.texture));
+        self.gl.delete_buffer(Some(&self.quad_buffer));
+        self.gl.delete_program(Some(&self.program));
+    }
 }

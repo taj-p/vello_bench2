@@ -8,6 +8,7 @@
 use wasm_bindgen::JsCast;
 
 use crate::backend::{Backend, current_backend_kind, new_backend};
+use crate::resource_store::ResourceStore;
 use crate::scenes::{self, BenchScene, ParamId, SceneId, scene_index};
 use vello_common::kurbo::Affine;
 use web_sys::HtmlCanvasElement;
@@ -91,6 +92,7 @@ pub(crate) struct BenchHarness {
     bench_scene: Option<Box<dyn BenchScene>>,
     bench_canvas: Option<HtmlCanvasElement>,
     bench_backend: Option<Box<dyn Backend>>,
+    resources: ResourceStore,
 }
 
 impl std::fmt::Debug for BenchHarness {
@@ -112,6 +114,7 @@ impl BenchHarness {
             bench_scene: None,
             bench_canvas: None,
             bench_backend: None,
+            resources: ResourceStore::new(),
         }
     }
 
@@ -123,6 +126,7 @@ impl BenchHarness {
         _height: u32,
         canvas: &HtmlCanvasElement,
     ) {
+        self.cleanup_current_bench();
         self.results.clear();
         self.run_order = selected;
         self.run_pos = 0;
@@ -171,7 +175,7 @@ impl BenchHarness {
                 self.bench_backend =
                     Some(new_backend(canvas, width, height, current_backend_kind()));
                 let be = self.bench_backend.as_mut().unwrap();
-                render_one(scene, be.as_mut(), width, height, now);
+                render_one(scene, be.as_mut(), &mut self.resources, width, height, now);
                 self.phase = Phase::Running {
                     idx,
                     last_now: now,
@@ -190,7 +194,7 @@ impl BenchHarness {
                 let def = &defs[idx];
                 let scene = self.bench_scene.as_mut().unwrap().as_mut();
                 let be = self.bench_backend.as_mut().unwrap();
-                render_one(scene, be.as_mut(), width, height, now);
+                render_one(scene, be.as_mut(), &mut self.resources, width, height, now);
                 let dt = (now - last_now).max(0.0);
                 if warmup_remaining > 0 {
                     warmup_remaining -= 1;
@@ -219,14 +223,12 @@ impl BenchHarness {
 
                     self.run_pos += 1;
                     if self.run_pos < self.run_order.len() {
-                        self.bench_scene = None;
-                        self.bench_backend = None;
+                        self.cleanup_current_bench();
                         self.phase = Phase::PendingBench(self.run_order[self.run_pos]);
                     } else {
                         self.phase = Phase::Complete;
-                        self.bench_scene = None;
+                        self.cleanup_current_bench();
                         self.bench_canvas = None;
-                        self.bench_backend = None;
                         events.push(HarnessEvent::AllDone);
                     }
                 }
@@ -234,6 +236,14 @@ impl BenchHarness {
         }
 
         events
+    }
+
+    fn cleanup_current_bench(&mut self) {
+        if let Some(backend) = self.bench_backend.as_mut() {
+            self.resources.clear_all(backend.as_mut());
+        }
+        self.bench_scene = None;
+        self.bench_backend = None;
     }
 }
 
@@ -268,12 +278,13 @@ pub(crate) fn scaled_count(calibrated_value: usize, preset: u32) -> usize {
 fn render_one(
     bench_scene: &mut dyn BenchScene,
     backend: &mut dyn Backend,
+    resources: &mut ResourceStore,
     width: u32,
     height: u32,
     time: f64,
 ) {
     backend.reset();
-    bench_scene.render(backend, width, height, time, Affine::IDENTITY);
+    bench_scene.render(backend, resources, width, height, time, Affine::IDENTITY);
     backend.render_offscreen();
     backend.blit();
 }
@@ -300,17 +311,20 @@ pub fn run_single_bench(idx: usize, preset: u32, width: u32, height: u32) -> Opt
     apply_params(scene, def.params, def.scale, preset);
 
     let mut be = new_backend(&canvas, width, height, current_backend_kind());
+    let mut resources = ResourceStore::new();
     let perf = web_sys::window().unwrap().performance().unwrap();
     let mut last = perf.now();
     let mut total_ms = 0.0;
     for i in 0..(BENCH_WARMUP_SAMPLES + BENCH_MEASURED_SAMPLES) {
         let now = perf.now();
-        render_one(scene, be.as_mut(), width, height, now);
+        render_one(scene, be.as_mut(), &mut resources, width, height, now);
         if i >= BENCH_WARMUP_SAMPLES {
             total_ms += (now - last).max(0.0);
         }
         last = now;
     }
+
+    resources.clear_all(be.as_mut());
 
     // Clean up the temporary canvas.
     document.body().unwrap().remove_child(&canvas).unwrap();
