@@ -1194,6 +1194,8 @@ impl Ui {
             benches: Some(benches),
             bench_warmup_samples: Some(self.bench_warmup_samples() as u32),
             bench_measured_samples: Some(self.bench_measured_samples() as u32),
+            bench_viewport_width: Some(self.configured_viewport().0),
+            bench_viewport_height: Some(self.configured_viewport().1),
             ab_rounds: Some(self.ab_rounds() as u32),
         });
     }
@@ -1219,6 +1221,12 @@ impl Ui {
         }
         if let Some(measured) = saved.bench_measured_samples {
             self.measured_input.set_value(&measured.max(1).to_string());
+        }
+        if let Some(width) = saved.bench_viewport_width {
+            self.vp_width_input.set_value(&width.to_string());
+        }
+        if let Some(height) = saved.bench_viewport_height {
+            self.vp_height_input.set_value(&height.to_string());
         }
         if let Some(rounds) = saved.ab_rounds
             && let Some(input) = &self.ab_rounds_input

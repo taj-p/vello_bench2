@@ -4,7 +4,8 @@ use vello_common::kurbo::{Affine, BezPath, Rect, Stroke};
 use vello_common::paint::{ImageSource, PaintType};
 use vello_common::peniko::{Fill, FontData};
 use vello_common::pixmap::Pixmap;
-use web_sys::HtmlCanvasElement;
+use wasm_bindgen::JsCast;
+use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
 use crate::backend::{Backend, BackendKind, layout_text_glyphs, uploaded_image_id};
 use crate::capability::CapabilityProfile;
@@ -24,9 +25,18 @@ impl std::fmt::Debug for BackendImpl {
 
 impl BackendImpl {
     pub fn new(canvas: &HtmlCanvasElement, w: u32, h: u32) -> Self {
+        let atlas_dimension = query_max_texture_size().min(8_192).max(w.max(h).min(8_192));
+        let settings = vello_hybrid::RenderSettings {
+            atlas_config: vello_hybrid::AtlasConfig {
+                max_atlases: 32,
+                atlas_size: (atlas_dimension, atlas_dimension),
+                ..vello_hybrid::AtlasConfig::default()
+            },
+            ..vello_hybrid::RenderSettings::default()
+        };
         Self {
             ctx: vello_hybrid::Scene::new(w as u16, h as u16),
-            renderer: vello_hybrid::WebGlRenderer::new(canvas),
+            renderer: vello_hybrid::WebGlRenderer::new_with(canvas, settings),
         }
     }
 
@@ -37,6 +47,32 @@ impl BackendImpl {
             .hint(hint)
             .fill_glyphs(glyphs.iter().copied());
     }
+}
+
+fn query_max_texture_size() -> u32 {
+    let Some(window) = web_sys::window() else {
+        return 8_192;
+    };
+    let Some(document) = window.document() else {
+        return 8_192;
+    };
+    let Ok(element) = document.create_element("canvas") else {
+        return 8_192;
+    };
+    let Ok(temp_canvas) = element.dyn_into::<HtmlCanvasElement>() else {
+        return 8_192;
+    };
+    let Ok(Some(context)) = temp_canvas.get_context("webgl2") else {
+        return 8_192;
+    };
+    let Ok(gl) = context.dyn_into::<WebGl2RenderingContext>() else {
+        return 8_192;
+    };
+    gl.get_parameter(WebGl2RenderingContext::MAX_TEXTURE_SIZE)
+        .ok()
+        .and_then(|value| value.as_f64())
+        .map(|value| value as u32)
+        .unwrap_or(8_192)
 }
 
 impl Backend for BackendImpl {

@@ -92,6 +92,10 @@ pub(crate) struct UiState {
     pub(crate) bench_warmup_samples: Option<u32>,
     /// Benchmark measured frames.
     pub(crate) bench_measured_samples: Option<u32>,
+    /// Benchmark viewport width.
+    pub(crate) bench_viewport_width: Option<u32>,
+    /// Benchmark viewport height.
+    pub(crate) bench_viewport_height: Option<u32>,
     /// A/B rounds per benchmark pair.
     pub(crate) ab_rounds: Option<u32>,
 }
