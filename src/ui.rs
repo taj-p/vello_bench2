@@ -164,7 +164,7 @@ pub struct Ui {
     // Layout
     #[allow(dead_code, reason = "kept alive to prevent GC")]
     top_bar: HtmlElement,
-    calibration_overlay: HtmlElement,
+    presentation_overlay: HtmlElement,
     interactive_view: HtmlElement,
     benchmark_view: HtmlElement,
 
@@ -191,7 +191,6 @@ pub struct Ui {
     warmup_input: HtmlInputElement,
     measured_input: HtmlInputElement,
     calibrate_btn: HtmlElement,
-    reset_calibration_btn: HtmlElement,
     calibration_status: HtmlElement,
     /// Start button.
     pub start_btn: HtmlElement,
@@ -265,14 +264,14 @@ impl Ui {
 
         let (
             top_bar,
-            calibration_overlay,
+            presentation_overlay,
             sidebar_toggle_btn,
             tab_interactive,
             tab_benchmark,
             renderer_select,
         ) = build_top_bar(document, crate::backend::current_backend_kind());
         app_overlay.append_child(&top_bar).unwrap();
-        dashboard_root.append_child(&calibration_overlay).unwrap();
+        dashboard_root.append_child(&presentation_overlay).unwrap();
 
         let iv = build_interactive_view(
             document,
@@ -315,7 +314,7 @@ impl Ui {
 
         let mut ui = Self {
             top_bar,
-            calibration_overlay,
+            presentation_overlay,
             interactive_view: iv.view,
             benchmark_view,
             tab_interactive,
@@ -334,7 +333,6 @@ impl Ui {
             warmup_input: cfg.warmup_input,
             measured_input: cfg.measured_input,
             calibrate_btn: cfg.calibrate_btn,
-            reset_calibration_btn: cfg.reset_calibration_btn,
             calibration_status: cfg.calibration_status,
             start_btn: cfg.start_btn,
             ab_start_btn: cfg.ab_start_btn,
@@ -416,7 +414,7 @@ impl Ui {
                 .unwrap();
         }
         if !active {
-            self.calibration_overlay
+            self.presentation_overlay
                 .style()
                 .set_property("display", "none")
                 .unwrap();
@@ -643,13 +641,9 @@ impl Ui {
         &self.calibrate_btn
     }
 
-    pub fn reset_calibration_btn(&self) -> &HtmlElement {
-        &self.reset_calibration_btn
-    }
-
     pub fn set_calibration_status(&self, text: &str) {
         self.calibration_status.set_text_content(Some(text));
-        self.calibration_overlay.set_text_content(Some(text));
+        self.presentation_overlay.set_text_content(Some(text));
     }
 
     pub fn set_calibration_ready(&self, ready: bool) {
@@ -661,14 +655,8 @@ impl Ui {
             .style()
             .set_property("pointer-events", if ready { "auto" } else { "none" })
             .unwrap();
-        self.reset_calibration_btn
-            .style()
-            .set_property("opacity", if ready { "1" } else { "0.4" })
-            .unwrap();
-        self.reset_calibration_btn
-            .style()
-            .set_property("pointer-events", if ready { "auto" } else { "none" })
-            .unwrap();
+        self.calibrate_btn
+            .set_text_content(Some(if ready { "Recalibrate" } else { "Calibrate" }));
     }
 
     pub fn set_calibration_running(&self, running: bool) {
@@ -680,13 +668,17 @@ impl Ui {
             .style()
             .set_property("pointer-events", if running { "none" } else { "auto" })
             .unwrap();
-        self.reset_calibration_btn
-            .style()
-            .set_property("pointer-events", if running { "none" } else { "auto" })
-            .unwrap();
-        self.calibration_overlay
+        self.presentation_overlay
             .style()
             .set_property("display", if running { "block" } else { "none" })
+            .unwrap();
+    }
+
+    pub fn set_presentation_status(&self, text: &str) {
+        self.presentation_overlay.set_text_content(Some(text));
+        self.presentation_overlay
+            .style()
+            .set_property("display", "block")
             .unwrap();
     }
 
@@ -1348,7 +1340,6 @@ struct BenchConfigParts {
     warmup_input: HtmlInputElement,
     measured_input: HtmlInputElement,
     calibrate_btn: HtmlElement,
-    reset_calibration_btn: HtmlElement,
     calibration_status: HtmlElement,
     start_btn: HtmlElement,
     ab_start_btn: Option<HtmlElement>,
@@ -1417,10 +1408,10 @@ fn build_top_bar(
     nav_group.append_child(&tab_interactive).unwrap();
     top_bar.append_child(&nav_group).unwrap();
 
-    let calibration_overlay = div(document);
-    calibration_overlay.set_text_content(Some("Starting calibration…"));
+    let presentation_overlay = div(document);
+    presentation_overlay.set_text_content(Some("Starting benchmark…"));
     class(
-        &calibration_overlay,
+        &presentation_overlay,
         "pointer-events-none fixed left-3 top-3 z-[85] hidden max-w-[22rem] border border-amber-300/30 bg-slate-950/92 px-3 py-2 text-xs font-medium text-amber-200 sm:left-3 sm:top-3 lg:left-4 lg:top-4",
     );
     let controls_group = div(document);
@@ -1487,7 +1478,7 @@ fn build_top_bar(
 
     (
         top_bar,
-        calibration_overlay,
+        presentation_overlay,
         sidebar_toggle_btn,
         tab_interactive,
         tab_benchmark,
@@ -1703,20 +1694,12 @@ fn build_bench_config(
     left_col.append_child(&calibration_status).unwrap();
 
     let calibrate_btn = div(document);
-    calibrate_btn.set_text_content(Some("Start Calibration"));
+    calibrate_btn.set_text_content(Some("Calibrate"));
     class(
         &calibrate_btn,
         "mb-2 border border-amber-300/30 bg-amber-300/10 px-4 py-2 text-center text-sm font-semibold text-amber-200 transition hover:bg-amber-300/15",
     );
     left_col.append_child(&calibrate_btn).unwrap();
-
-    let reset_calibration_btn = div(document);
-    reset_calibration_btn.set_text_content(Some("Reset Calibration"));
-    class(
-        &reset_calibration_btn,
-        "mb-3 border border-white/10 bg-slate-900 px-4 py-2 text-center text-sm font-medium text-slate-300 transition hover:bg-slate-800",
-    );
-    left_col.append_child(&reset_calibration_btn).unwrap();
 
     left_col
         .append_child(&section_label(document, "Viewport"))
@@ -1880,7 +1863,6 @@ fn build_bench_config(
         warmup_input,
         measured_input,
         calibrate_btn,
-        reset_calibration_btn,
         calibration_status,
         start_btn,
         ab_start_btn,

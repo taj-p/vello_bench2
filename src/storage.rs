@@ -188,13 +188,3 @@ pub(crate) fn save_calibration_profile(profile: CalibrationProfile) {
         let _ = storage.set_item(CALIBRATION_KEY, &json);
     }
 }
-
-pub(crate) fn delete_calibration_profile(key: &str) {
-    let mut store = load_calibration_store();
-    store.profiles.retain(|profile| profile.key != key);
-    if let Some(storage) = local_storage()
-        && let Ok(json) = serde_json::to_string(&store)
-    {
-        let _ = storage.set_item(CALIBRATION_KEY, &json);
-    }
-}

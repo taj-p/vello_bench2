@@ -448,6 +448,10 @@ impl AppState {
         // Highlight the currently running bench row
         if let Some(idx) = self.harness.current_bench_idx() {
             self.ui.bench_set_running(idx);
+            if let Some(def) = self.bench_defs.get(idx) {
+                self.ui
+                    .set_presentation_status(&format!("Running {}", def.name));
+            }
         }
 
         let (w, h) = (self.width, self.height);
@@ -514,8 +518,18 @@ impl AppState {
 
         self.ui.bench_started(&selected);
         self.ui.set_benchmark_presentation(true);
-        self.ui
-            .set_ab_status(&format!("Running control… ({}/{})", 1, self.ui.ab_rounds()));
+        if let Some(first_idx) = selected.first().copied()
+            && let Some(def) = self.bench_defs.get(first_idx)
+        {
+            let status = format!(
+                "Running control: {} ({}/{})",
+                def.name,
+                1,
+                self.ui.ab_rounds()
+            );
+            self.ui.set_ab_status(&status);
+            self.ui.set_presentation_status(&status);
+        }
         set_canvas_visibility(&self.canvas, false);
         set_canvas_visibility(&self.benchmark_canvas, false);
         self.show_ab_variant(Some(AbVariant::Control));
@@ -665,6 +679,11 @@ impl AppState {
             return;
         }
         let idx = ab.selected[ab.run_pos];
+        let bench_name = self
+            .bench_defs
+            .get(idx)
+            .map(|def| def.name)
+            .unwrap_or(result.name);
         match variant {
             AbVariant::Control => {
                 ab.control_samples.push(result.ms_per_frame);
@@ -678,11 +697,14 @@ impl AppState {
                 };
                 self.ui.bench_set_ab_control_done(idx, &control_preview);
                 ab.pending_control = Some(result);
-                self.ui.set_ab_status(&format!(
-                    "Running treatment… ({}/{})",
+                let status = format!(
+                    "Running treatment: {} ({}/{})",
+                    bench_name,
                     ab.round_pos + 1,
                     ab.total_rounds
-                ));
+                );
+                self.ui.set_ab_status(&status);
+                self.ui.set_presentation_status(&status);
                 self.show_ab_variant(Some(AbVariant::Treatment));
                 self.send_ab_bench(AbVariant::Treatment);
             }
@@ -693,11 +715,14 @@ impl AppState {
                 ab.treatment_samples.push(result.ms_per_frame);
                 if ab.round_pos + 1 < ab.total_rounds {
                     ab.round_pos += 1;
-                    self.ui.set_ab_status(&format!(
-                        "Running control… ({}/{})",
+                    let status = format!(
+                        "Running control: {} ({}/{})",
+                        bench_name,
                         ab.round_pos + 1,
                         ab.total_rounds
-                    ));
+                    );
+                    self.ui.set_ab_status(&status);
+                    self.ui.set_presentation_status(&status);
                     self.show_ab_variant(Some(AbVariant::Control));
                     self.send_ab_bench(AbVariant::Control);
                 } else {
@@ -722,10 +747,16 @@ impl AppState {
                     ab.control_samples.clear();
                     ab.treatment_samples.clear();
                     if ab.run_pos < ab.selected.len() {
-                        self.ui.set_ab_status(&format!(
-                            "Running control… ({}/{})",
-                            1, ab.total_rounds
-                        ));
+                        let next_idx = ab.selected[ab.run_pos];
+                        let next_name = self
+                            .bench_defs
+                            .get(next_idx)
+                            .map(|def| def.name)
+                            .unwrap_or("benchmark");
+                        let status =
+                            format!("Running control: {} ({}/{})", next_name, 1, ab.total_rounds);
+                        self.ui.set_ab_status(&status);
+                        self.ui.set_presentation_status(&status);
                         self.show_ab_variant(Some(AbVariant::Control));
                         self.send_ab_bench(AbVariant::Control);
                     } else {
@@ -1102,6 +1133,15 @@ fn wire_events(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
             st.harness.warmup_samples = st.ui.bench_warmup_samples();
             st.harness.measured_samples = st.ui.bench_measured_samples();
             st.ui.bench_started(&selected);
+            if let Some(first_idx) = selected.first().copied()
+                && let Some(def) = st.bench_defs.get(first_idx)
+            {
+                st.ui.set_presentation_status(&format!(
+                    "Running {} (1/{})",
+                    def.name,
+                    selected.len()
+                ));
+            }
             st.ui.set_benchmark_presentation(true);
             set_canvas_visibility(&st.canvas, false);
             set_canvas_visibility(&st.benchmark_canvas, true);
@@ -1122,32 +1162,6 @@ fn wire_events(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
         let btn = state.borrow().ui.calibrate_btn().clone();
         let cb = Closure::wrap(Box::new(move || {
             s.borrow_mut().start_calibration();
-        }) as Box<dyn FnMut()>);
-        btn.add_event_listener_with_callback("click", cb.as_ref().unchecked_ref())
-            .unwrap();
-        cb.forget();
-    }
-
-    // Reset calibration
-    {
-        let s = state.clone();
-        let btn = state.borrow().ui.reset_calibration_btn().clone();
-        let cb = Closure::wrap(Box::new(move || {
-            let mut st = s.borrow_mut();
-            if st.benchmark_running() {
-                return;
-            }
-            let (vp_w, vp_h) = st.ui.configured_viewport();
-            let key = st.calibration_key_for(vp_w, vp_h);
-            storage::delete_calibration_profile(&key);
-            st.calibration = None;
-            st.harness.set_calibration(None);
-            st.ui.update_bench_titles(&st.bench_defs, None);
-            st.ui.set_calibration_running(false);
-            st.ui.set_calibration_ready(false);
-            st.ui.set_ab_ready(false);
-            st.ui
-                .set_calibration_status("Calibration reset. Start a new calibration run.");
         }) as Box<dyn FnMut()>);
         btn.add_event_listener_with_callback("click", cb.as_ref().unchecked_ref())
             .unwrap();
