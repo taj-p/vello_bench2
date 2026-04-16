@@ -1368,7 +1368,7 @@ fn wire_events(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
 fn wire_pan_zoom(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
     let s = state.clone();
     let cb = Closure::wrap(Box::new(move |e: web_sys::MouseEvent| {
-        let mut st = s.borrow_mut();
+        let Ok(mut st) = s.try_borrow_mut() else { return };
         if st.ui.mode != AppMode::Interactive {
             return;
         }
@@ -1388,7 +1388,7 @@ fn wire_pan_zoom(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
 
     let s = state.clone();
     let cb = Closure::wrap(Box::new(move |e: web_sys::MouseEvent| {
-        let mut st = s.borrow_mut();
+        let Ok(mut st) = s.try_borrow_mut() else { return };
         if !st.dragging {
             return;
         }
@@ -1409,7 +1409,9 @@ fn wire_pan_zoom(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
 
     let s = state.clone();
     let cb = Closure::wrap(Box::new(move |_: web_sys::MouseEvent| {
-        s.borrow_mut().dragging = false;
+        if let Ok(mut st) = s.try_borrow_mut() {
+            st.dragging = false;
+        }
     }) as Box<dyn FnMut(_)>);
     window
         .add_event_listener_with_callback("mouseup", cb.as_ref().unchecked_ref())
@@ -1418,7 +1420,7 @@ fn wire_pan_zoom(state: &Rc<RefCell<AppState>>, window: &web_sys::Window) {
 
     let s = state.clone();
     let cb = Closure::wrap(Box::new(move |e: web_sys::WheelEvent| {
-        let mut st = s.borrow_mut();
+        let Ok(mut st) = s.try_borrow_mut() else { return };
         if st.ui.mode != AppMode::Interactive {
             return;
         }
